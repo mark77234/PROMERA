@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { Mascot } from "@/components/mascot";
 import { purposeOptions } from "@/data/purpose-options";
 import { withHonorific } from "@/lib/utils";
 
@@ -13,7 +14,12 @@ export function PurposeSelectScreen({ name, onSelect }: PurposeSelectScreenProps
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-12">
       <div className="animate-in fade-in slide-in-from-bottom-6 space-y-2 text-center duration-500">
-        <span className="text-5xl">🎯</span>
+        <Mascot
+          name="indicate"
+          alt="방향을 가리키는 프롬이"
+          className="mx-auto size-24"
+          sizes="96px"
+        />
         <h1 className="text-3xl font-extrabold">
           {withHonorific(name)}, 어떤 능력을 키우고 싶나요?
         </h1>

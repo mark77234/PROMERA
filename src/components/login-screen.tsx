@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import { ArrowLeft, LogIn } from "lucide-react";
+import { BrandLogo } from "@/components/brand-logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Mascot } from "@/components/mascot";
 import { toast } from "sonner";
 
 interface LoginScreenProps {
@@ -35,11 +37,14 @@ export function LoginScreen({ onLogin, onBack }: LoginScreenProps) {
           <ArrowLeft className="size-4" /> 돌아가기
         </button>
 
-        <div className="flex items-center gap-2 font-extrabold">
-          <span className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-            PP
-          </span>
-          <span className="text-xl">Process Path</span>
+        <div className="flex items-start justify-between gap-4">
+          <BrandLogo size="lg" />
+          <Mascot
+            name="hi"
+            alt="손을 흔드는 프롬이"
+            className="-mt-3 size-20"
+            sizes="80px"
+          />
         </div>
         <h1 className="mt-6 text-2xl font-extrabold">환영해요! 👋</h1>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -93,14 +98,15 @@ export function LoginScreen({ onLogin, onBack }: LoginScreenProps) {
         <div className="space-y-2.5">
           <Button
             variant="outline"
-            className="h-12 w-full rounded-xl font-semibold"
-            onClick={() => onLogin("google-user@pp.demo")}
+            className="h-12 w-full rounded-xl border-primary/20 bg-background font-semibold hover:bg-secondary"
+            onClick={() => onLogin("google-user@promera.demo")}
           >
             <span className="text-base">🇬</span> Google로 계속하기
           </Button>
           <Button
-            className="h-12 w-full rounded-xl bg-[#FEE500] font-semibold text-black hover:bg-[#f5dc00]"
-            onClick={() => onLogin("kakao-user@pp.demo")}
+            variant="secondary"
+            className="h-12 w-full rounded-xl border border-primary/15 font-semibold text-secondary-foreground hover:bg-primary hover:text-primary-foreground"
+            onClick={() => onLogin("kakao-user@promera.demo")}
           >
             <span className="text-base">💬</span> 카카오로 계속하기
           </Button>

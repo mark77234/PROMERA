@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ArrowRight, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { levelSurveyQuestions } from "@/data/level-survey";
+import { Mascot } from "@/components/mascot";
 import type { LevelSurveyAnswers } from "@/types/app";
 import { cn, withHonorific } from "@/lib/utils";
 
@@ -20,6 +21,7 @@ export function LevelSurveyScreen({ name, onComplete }: LevelSurveyScreenProps) 
   const question = levelSurveyQuestions[step];
   const total = levelSurveyQuestions.length;
   const progress = (step / total) * 100;
+  const mascot = step + 1 >= total ? "good" : "question";
 
   const advance = (nextAnswers: Partial<LevelSurveyAnswers>) => {
     if (step + 1 >= total) {
@@ -78,6 +80,12 @@ export function LevelSurveyScreen({ name, onComplete }: LevelSurveyScreenProps) 
         className="animate-in fade-in slide-in-from-right-8 space-y-6 duration-500"
       >
         <div className="space-y-2 text-center">
+          <Mascot
+            name={mascot}
+            alt="질문을 준비하는 프롬이"
+            className="mx-auto size-24"
+            sizes="96px"
+          />
           <h2 className="text-2xl font-extrabold leading-snug">
             {step === 0 ? `${withHonorific(name)}, ` : ""}
             {question.question}

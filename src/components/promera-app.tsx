@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
+import { BrandLogo } from "@/components/brand-logo";
 import { LandingPage } from "@/components/landing-page";
 import { LoginScreen } from "@/components/login-screen";
 import { OnboardingScreen } from "@/components/onboarding-screen";
@@ -10,6 +11,7 @@ import { PurposeSelectScreen } from "@/components/purpose-select-screen";
 import { PurposeDetailScreen } from "@/components/purpose-detail-screen";
 import { ChatScreen } from "@/components/chat/chat-screen";
 import { getPurposeById } from "@/data/purpose-options";
+import { deriveSavedContext } from "@/lib/prompt-coach";
 import { clearUser, loadUser, saveUser } from "@/lib/user-store";
 import { withHonorific } from "@/lib/utils";
 import type { LevelSurveyAnswers, UserProfile } from "@/types/app";
@@ -23,7 +25,7 @@ type Screen =
   | "detail"
   | "chat";
 
-export function PPApp() {
+export function PromeraApp() {
   const [screen, setScreen] = useState<Screen>("landing");
   const [user, setUser] = useState<UserProfile | null>(null);
 
@@ -66,7 +68,10 @@ export function PPApp() {
   };
 
   const handleDetail = (detail: string) => {
-    update({ purposeDetail: detail });
+    update({
+      purposeDetail: detail,
+      savedContext: deriveSavedContext(user?.purposeId ?? "other", detail),
+    });
     setScreen("chat");
   };
 
@@ -94,6 +99,7 @@ export function PPApp() {
       <ChatScreen
         key={`${user.purposeId}-${user.purposeDetail}`}
         user={user}
+        onUpdateUser={update}
         onChangePurpose={() => setScreen("purpose")}
         onLogout={handleLogout}
       />
@@ -107,12 +113,9 @@ export function PPApp() {
         <button
           type="button"
           onClick={handleReset}
-          className="flex items-center gap-2 font-extrabold tracking-tight"
+          className="flex items-center"
         >
-          <span className="flex size-7 items-center justify-center rounded-lg bg-primary text-sm text-primary-foreground">
-            PP
-          </span>
-          Process Path
+          <BrandLogo size="sm" />
         </button>
         {user?.name && (
           <span className="text-sm font-semibold text-muted-foreground">

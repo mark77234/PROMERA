@@ -1,11 +1,14 @@
 import type { UserProfile } from "@/types/app";
 
-const STORAGE_KEY = "pp-user";
+const STORAGE_KEY = "promera-user";
+const LEGACY_STORAGE_KEY = "pp-user";
 
 export function loadUser(): UserProfile | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw =
+      window.localStorage.getItem(STORAGE_KEY) ??
+      window.localStorage.getItem(LEGACY_STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as UserProfile;
     if (!parsed || typeof parsed.email !== "string") return null;
@@ -28,6 +31,7 @@ export function clearUser(): void {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.removeItem(STORAGE_KEY);
+    window.localStorage.removeItem(LEGACY_STORAGE_KEY);
   } catch {
     // ignore
   }

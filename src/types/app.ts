@@ -8,6 +8,8 @@ export interface UserProfile {
   purposeId?: string;
   purposeLabel?: string;
   purposeDetail?: string;
+  savedContext?: SavedContext;
+  promptRecipes?: PromptRecipe[];
 }
 
 export interface LevelSurveyAnswers {
@@ -40,6 +42,89 @@ export interface Feedback {
   modelPrompt: string;
   coachCards: CoachCard[];
   nextChallenge: string;
+}
+
+export interface SavedContext {
+  purposeId?: string;
+  summary?: string;
+  businessName?: string;
+  location?: string;
+  audience?: string;
+  product?: string;
+  tone?: string;
+  platform?: string;
+  role?: string;
+  topic?: string;
+  outputFormat?: string;
+  constraints?: string;
+}
+
+export interface IngredientOption {
+  label: string;
+  value: string;
+}
+
+export interface PromptIngredient {
+  id: string;
+  label: string;
+  missingLabel: string;
+  question: string;
+  why: string;
+  placeholder: string;
+  options: IngredientOption[];
+  detect: string[];
+  savedContextKey?: keyof SavedContext;
+}
+
+export interface Mission {
+  id: string;
+  purposeId: string;
+  emoji: string;
+  title: string;
+  description: string;
+  situation: string;
+  starterPrompt: string;
+  ingredients: PromptIngredient[];
+  promptTemplate: string;
+  recipeTemplate: string;
+  beforePreview: string;
+  afterPreviewTemplate: string;
+}
+
+export interface PromptDraft {
+  missionId: string;
+  originalPrompt: string;
+  values: Record<string, string>;
+  sources: Record<string, "prompt" | "saved" | "chip" | "typed">;
+}
+
+export interface IngredientStatus extends PromptIngredient {
+  value?: string;
+  source?: "prompt" | "saved" | "chip" | "typed";
+}
+
+export interface PromptAnalysis {
+  presentIngredients: IngredientStatus[];
+  missingIngredients: IngredientStatus[];
+  nextQuestion?: string;
+  nextIngredient?: PromptIngredient;
+  chipOptions: IngredientOption[];
+  improvedPrompt: string;
+  improvements: string[];
+  beforePreview: string;
+  afterPreview: string;
+  recipeTemplate: string;
+  complete: boolean;
+}
+
+export interface PromptRecipe {
+  id: string;
+  missionId: string;
+  purposeId: string;
+  title: string;
+  template: string;
+  prompt: string;
+  createdAt: string;
 }
 
 export type ChatRole = "assistant" | "user";

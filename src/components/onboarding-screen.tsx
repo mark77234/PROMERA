@@ -5,6 +5,7 @@ import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Mascot } from "@/components/mascot";
 import { cn } from "@/lib/utils";
 
 interface OnboardingScreenProps {
@@ -31,7 +32,12 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   return (
     <div className="mx-auto w-full max-w-xl px-4 py-12">
       <div className="animate-in fade-in slide-in-from-bottom-6 space-y-2 text-center duration-500">
-        <span className="text-5xl">👋</span>
+        <Mascot
+          name="hi"
+          alt="인사하는 프롬이"
+          className="mx-auto size-24"
+          sizes="96px"
+        />
         <h1 className="text-3xl font-extrabold">처음이신가요?</h1>
         <p className="text-muted-foreground">
           맞춤 코칭을 위해 몇 가지만 알려주세요. 30초면 끝나요!

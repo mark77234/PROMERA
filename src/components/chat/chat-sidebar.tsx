@@ -1,28 +1,32 @@
 "use client";
 
 import { GraduationCap, LogOut, RefreshCw } from "lucide-react";
+import { BrandLogo } from "@/components/brand-logo";
 import { Button } from "@/components/ui/button";
+import { Mascot } from "@/components/mascot";
 import { getPurposeById } from "@/data/purpose-options";
-import type { UserProfile } from "@/types/app";
+import type { PromptRecipe, UserProfile } from "@/types/app";
 
 interface ChatSidebarProps {
   user: UserProfile;
   turn: number;
+  recipes: PromptRecipe[];
   onChangePurpose: () => void;
   onLogout: () => void;
 }
 
-export function ChatSidebar({ user, turn, onChangePurpose, onLogout }: ChatSidebarProps) {
+export function ChatSidebar({
+  user,
+  turn,
+  recipes,
+  onChangePurpose,
+  onLogout,
+}: ChatSidebarProps) {
   const purpose = getPurposeById(user.purposeId ?? "other");
 
   return (
     <aside className="hidden w-72 shrink-0 flex-col border-r bg-muted/40 p-5 md:flex">
-      <div className="flex items-center gap-2 font-extrabold">
-        <span className="flex size-8 items-center justify-center rounded-xl bg-primary text-sm text-primary-foreground">
-          PP
-        </span>
-        Process Path
-      </div>
+      <BrandLogo />
 
       {/* 프로필 */}
       <div className="mt-6 rounded-2xl border bg-background p-4">
@@ -50,11 +54,19 @@ export function ChatSidebar({ user, turn, onChangePurpose, onLogout }: ChatSideb
         <p className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground">
           <GraduationCap className="size-4" /> 지금 배우는 중
         </p>
+        <div className="mt-3 flex justify-center">
+          <Mascot
+            name={turn >= 3 ? "reward" : turn >= 1 ? "good" : "seat"}
+            alt="학습을 함께하는 프롬이"
+            className="size-24"
+            sizes="96px"
+          />
+        </div>
         <p className="mt-2 text-sm font-bold">
           {purpose.emoji} {purpose.label}
         </p>
         <p className="mt-1 text-xs text-muted-foreground">
-          오늘 실습 {turn}회 완료 {turn >= 3 ? "🔥" : turn >= 1 ? "💪" : ""}
+          저장한 레시피 {turn}개 {turn >= 3 ? "✨" : turn >= 1 ? "💪" : ""}
         </p>
         <div className="mt-2 flex gap-1">
           {Array.from({ length: 5 }, (_, i) => (
@@ -65,6 +77,28 @@ export function ChatSidebar({ user, turn, onChangePurpose, onLogout }: ChatSideb
               }`}
             />
           ))}
+        </div>
+      </div>
+
+      <div className="mt-4 rounded-2xl border bg-background p-4">
+        <p className="text-xs font-bold text-muted-foreground">내 프롬프트 레시피</p>
+        <div className="mt-3 space-y-2">
+          {recipes.length === 0 ? (
+            <p className="rounded-xl bg-muted px-3 py-3 text-xs leading-relaxed text-muted-foreground">
+              완성한 프롬프트를 저장하면 여기에 쌓입니다.
+            </p>
+          ) : (
+            recipes.slice(0, 4).map((recipe) => (
+              <div key={recipe.id} className="rounded-xl bg-secondary/70 px-3 py-2">
+                <p className="truncate text-xs font-extrabold text-secondary-foreground">
+                  {recipe.title}
+                </p>
+                <p className="mt-1 max-h-8 overflow-hidden text-[11px] leading-relaxed text-muted-foreground">
+                  {recipe.prompt}
+                </p>
+              </div>
+            ))
+          )}
         </div>
       </div>
 

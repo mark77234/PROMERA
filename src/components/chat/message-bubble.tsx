@@ -1,5 +1,6 @@
 "use client";
 
+import { Mascot } from "@/components/mascot";
 import { cn } from "@/lib/utils";
 
 interface MessageBubbleProps {
@@ -19,9 +20,7 @@ export function MessageBubble({ role, children, wide = false }: MessageBubblePro
       )}
     >
       {!isUser && (
-        <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
-          PP
-        </div>
+        <Mascot name="good" className="size-9" sizes="36px" />
       )}
       <div
         className={cn(

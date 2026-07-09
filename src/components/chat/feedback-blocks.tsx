@@ -5,12 +5,12 @@ import { CopyButton } from "@/components/copy-button";
 import type { Feedback } from "@/types/app";
 
 const KIND_STYLE: Record<string, string> = {
-  model: "bg-blue-50 border-blue-200 text-blue-900",
-  mcp: "bg-emerald-50 border-emerald-200 text-emerald-900",
-  agent: "bg-amber-50 border-amber-200 text-amber-900",
-  process: "bg-rose-50 border-rose-200 text-rose-900",
-  planmode: "bg-indigo-50 border-indigo-200 text-indigo-900",
-  docs: "bg-teal-50 border-teal-200 text-teal-900",
+  model: "bg-secondary/80 border-primary/20 text-secondary-foreground",
+  mcp: "bg-secondary/70 border-primary/20 text-secondary-foreground",
+  agent: "bg-primary/10 border-primary/25 text-foreground",
+  process: "bg-muted border-primary/20 text-foreground",
+  planmode: "bg-secondary/80 border-primary/25 text-secondary-foreground",
+  docs: "bg-muted border-primary/20 text-foreground",
 };
 
 interface FeedbackBlocksProps {
@@ -34,10 +34,10 @@ export function FeedbackBlocks({ feedback }: FeedbackBlocksProps) {
       {/* 수정 방안 */}
       {feedback.improvements.length > 0 && (
         <div className="space-y-1.5">
-          <p className="text-sm font-bold text-amber-700">🔧 이렇게 업그레이드해보세요</p>
+          <p className="text-sm font-bold text-primary">🔧 이렇게 업그레이드해보세요</p>
           {feedback.improvements.map((line) => (
             <p key={line} className="flex gap-2 text-[15px] leading-relaxed">
-              <Wrench className="mt-1 size-4 shrink-0 text-amber-500" />
+              <Wrench className="mt-1 size-4 shrink-0 text-primary" />
               {line}
             </p>
           ))}

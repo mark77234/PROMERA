@@ -1,5 +1,5 @@
-import { PPApp } from "@/components/pp-app";
+import { PromeraApp } from "@/components/promera-app";
 
 export default function Home() {
-  return <PPApp />;
+  return <PromeraApp />;
 }

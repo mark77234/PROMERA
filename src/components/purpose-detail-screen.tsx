@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Lightbulb, Rocket } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Mascot } from "@/components/mascot";
 import { getPurposeById } from "@/data/purpose-options";
 
 interface PurposeDetailScreenProps {
@@ -18,7 +19,17 @@ export function PurposeDetailScreen({ purposeId, onComplete }: PurposeDetailScre
   return (
     <div className="mx-auto w-full max-w-xl px-4 py-12">
       <div className="animate-in fade-in slide-in-from-bottom-6 space-y-2 text-center duration-500">
-        <span className="text-5xl">{purpose.emoji}</span>
+        <div className="relative mx-auto size-24">
+          <Mascot
+            name="teach"
+            alt="코칭을 준비하는 프롬이"
+            className="size-24"
+            sizes="96px"
+          />
+          <span className="absolute -right-1 bottom-1 flex size-9 items-center justify-center rounded-full bg-background text-2xl shadow-sm">
+            {purpose.emoji}
+          </span>
+        </div>
         <h1 className="text-3xl font-extrabold">{purpose.label}</h1>
         <p className="text-muted-foreground">
           조금 더 자세히 알려주세요. 구체적일수록 코칭이 정확해져요.
