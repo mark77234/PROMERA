@@ -100,9 +100,8 @@ export function deriveSavedContext(purposeId: string, detail: string): SavedCont
   if (platform) context.platform = normalizeWhitespace(platform);
   if (businessName) context.businessName = normalizeWhitespace(businessName);
 
-  if (!context.topic && detail.trim()) {
-    context.topic = detail.trim().length > 80 ? `${detail.trim().slice(0, 80)}...` : detail.trim();
-  }
+  // topic은 서술 전체 문장을 그대로 넣으면 완성 프롬프트가 어색해지므로
+  // 자동 저장하지 않는다 — 미션에서 칩/입력으로 직접 채우게 한다.
 
   return context;
 }

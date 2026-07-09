@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
+import { ArrowRight } from "lucide-react";
 import { Mascot } from "@/components/mascot";
 import { purposeOptions } from "@/data/purpose-options";
 import { withHonorific } from "@/lib/utils";
@@ -30,19 +30,24 @@ export function PurposeSelectScreen({ name, onSelect }: PurposeSelectScreenProps
 
       <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {purposeOptions.map((option, idx) => (
-          <Button
+          <button
             key={option.id}
-            variant="ghost"
+            type="button"
             onClick={() => onSelect(option.id)}
-            className="animate-in fade-in slide-in-from-bottom-4 fill-mode-both flex h-auto flex-col items-start gap-2 whitespace-normal rounded-3xl border-2 border-border p-6 text-left transition-all duration-500 hover:-translate-y-1 hover:border-primary hover:bg-secondary/50 hover:shadow-lg active:scale-[0.98]"
+            className="group animate-in fade-in slide-in-from-bottom-4 fill-mode-both flex flex-col items-start gap-2 rounded-3xl border-2 border-border bg-card p-6 text-left shadow-sm shadow-primary/5 transition-all duration-300 hover:-translate-y-1 hover:border-primary hover:bg-secondary/40 hover:shadow-lg hover:shadow-primary/10 active:scale-[0.98]"
             style={{ animationDelay: `${idx * 90}ms` }}
           >
-            <span className="text-4xl">{option.emoji}</span>
+            <span className="flex w-full items-start justify-between">
+              <span className="text-4xl transition-transform duration-300 group-hover:scale-110">
+                {option.emoji}
+              </span>
+              <ArrowRight className="size-4 translate-x-0 text-primary opacity-0 transition-all duration-300 group-hover:translate-x-1 group-hover:opacity-100" />
+            </span>
             <span className="text-base font-bold">{option.label}</span>
             <span className="text-sm font-normal leading-relaxed text-muted-foreground">
               {option.description}
             </span>
-          </Button>
+          </button>
         ))}
       </div>
     </div>

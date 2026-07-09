@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowRight, Check } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { levelSurveyQuestions } from "@/data/level-survey";
 import { Mascot } from "@/components/mascot";
@@ -51,6 +51,19 @@ export function LevelSurveyScreen({ name, onComplete }: LevelSurveyScreenProps) 
     advance(next);
   };
 
+  const goBack = () => {
+    if (step === 0) return;
+    const prevStep = step - 1;
+    const prevQuestion = levelSurveyQuestions[prevStep];
+    setStep(prevStep);
+    // 복수 선택 문항으로 돌아가면 기존 선택을 복원한다.
+    setMultiPicks(
+      prevQuestion.multiSelect
+        ? ((answers[prevQuestion.id] as string[] | undefined) ?? [])
+        : []
+    );
+  };
+
   const selected = (label: string) =>
     question.multiSelect
       ? multiPicks.includes(label)
@@ -61,7 +74,19 @@ export function LevelSurveyScreen({ name, onComplete }: LevelSurveyScreenProps) 
       {/* 진행 바 */}
       <div className="mb-10 space-y-2">
         <div className="flex items-center justify-between text-sm font-semibold">
-          <span className="text-primary">수준 파악하기</span>
+          <span className="flex items-center gap-2">
+            {step > 0 && (
+              <button
+                type="button"
+                onClick={goBack}
+                aria-label="이전 문항으로"
+                className="flex size-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+              >
+                <ArrowLeft className="size-4" />
+              </button>
+            )}
+            <span className="text-primary">수준 파악하기</span>
+          </span>
           <span className="text-muted-foreground">
             {step + 1} / {total}
           </span>

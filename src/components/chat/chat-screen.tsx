@@ -793,9 +793,34 @@ export function ChatScreen({
                 : "PROMERA 코칭 챗봇"}
             </span>
           </div>
-          <span className="rounded-full bg-secondary px-3 py-1 text-xs font-bold text-secondary-foreground">
-            질의응답 {trainingStats.qnaCount}회
-          </span>
+          <div className="flex items-center gap-2">
+            {currentAnalysis && !currentAnalysis.complete && (
+              <span className="hidden items-center gap-2 rounded-full border border-primary/15 bg-card px-3 py-1 text-xs font-bold text-primary sm:flex">
+                재료 {currentAnalysis.presentIngredients.length}/
+                {currentAnalysis.presentIngredients.length +
+                  currentAnalysis.missingIngredients.length}
+                <span className="h-1.5 w-14 overflow-hidden rounded-full bg-secondary">
+                  <span
+                    className="block h-full rounded-full bg-primary transition-all duration-500"
+                    style={{
+                      width: `${
+                        (currentAnalysis.presentIngredients.length /
+                          Math.max(
+                            1,
+                            currentAnalysis.presentIngredients.length +
+                              currentAnalysis.missingIngredients.length
+                          )) *
+                        100
+                      }%`,
+                    }}
+                  />
+                </span>
+              </span>
+            )}
+            <span className="rounded-full bg-secondary px-3 py-1 text-xs font-bold text-secondary-foreground">
+              질의응답 {trainingStats.qnaCount}회
+            </span>
+          </div>
         </header>
 
         <main className="flex-1 overflow-y-auto">
@@ -859,7 +884,7 @@ export function ChatScreen({
             >
               <Sparkles className="size-3.5" /> 예시 프롬프트 채우기
             </button>
-            <div className="flex items-end gap-2">
+            <div className="flex items-end gap-2 rounded-3xl border border-primary/15 bg-card p-2 pl-4 shadow-sm shadow-primary/5 transition-all focus-within:border-primary/40 focus-within:shadow-md focus-within:shadow-primary/10 focus-within:ring-4 focus-within:ring-primary/10">
               <Textarea
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
@@ -870,13 +895,14 @@ export function ChatScreen({
                   }
                 }}
                 placeholder={inputPlaceholder}
-                className="max-h-40 min-h-13 flex-1 resize-none rounded-2xl border-primary/15 bg-card px-4 py-3.5 text-[15px] shadow-sm focus-visible:ring-primary/25"
+                className="max-h-40 min-h-11 flex-1 resize-none border-0 bg-transparent p-0 py-2.5 text-[15px] shadow-none focus-visible:ring-0"
               />
               <Button
                 size="lg"
                 onClick={send}
                 disabled={!input.trim() || typing}
-                className="size-13 shrink-0 rounded-2xl p-0 transition-transform hover:scale-105 active:scale-95"
+                aria-label={currentAnalysis?.nextIngredient ? "답변 보내기" : "프롬프트 보내기"}
+                className="size-11 shrink-0 rounded-2xl p-0 transition-transform hover:scale-105 active:scale-95"
               >
                 {currentAnalysis?.nextIngredient ? (
                   <Check className="size-5" />
