@@ -1,36 +1,52 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# PP (Process Path)
 
-## Getting Started
+**비전공자를 전공자처럼 — 실기형 AI 활용능력 진단·훈련 코치**
 
-First, run the development server:
+2026 제11회 부울경 AI 융합 해커톤 (AI + X) 참가작.
+사용자가 직접 작성한 프롬프트를 5개 기준(목표 명확성 · 맥락 제공 · 출력 형식 지정 · 조건·제약 설정 · 검증 가능성, 각 20점)으로 진단·채점하고, 코칭 질문으로 스스로 개선하게 하여 Before/After 점수 변화와 맞춤 학습 Path, AI 활용능력 리포트를 제공합니다.
+
+## 실행 방법
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+# http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+프로덕션 빌드:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm run build && npm start
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 60초 데모 시나리오
 
-## Learn More
+1. 랜딩에서 닉네임 `카페 사장님` 입력 → **진단 시작하기**
+2. 목적 선택: **홍보 콘텐츠 제작** (나머지는 준비 중 토스트)
+3. 설문 3문항 답변 → 목표 입력(**예시 목표 넣어보기**)
+4. 프롬프트 실습: **예시 입력하기** → `우리 카페 홍보글 써줘` → **프롬프트 진단하기**
+5. 분석 애니메이션(약 4초) → **22점 / AI 입문형** 진단
+6. 코칭 질문: **예시 채우기** → **개선 프롬프트 만들기**
+7. 개선 프롬프트 확인 → **점수 비교 보기** → **84점 (+62점)** 클라이맥스
+8. 맞춤 학습 Path → **내 AI 활용능력 리포트** → 복사/다운로드
 
-To learn more about Next.js, take a look at the following resources:
+심사위원이 임의의 프롬프트를 입력해도 규칙 기반 채점 엔진이 실시간으로 점수를 산출합니다.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 채점 구조
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- [src/lib/scoring.ts](src/lib/scoring.ts) — 5개 고정 루브릭의 규칙 기반(키워드·패턴 감지) 채점 엔진. 결정론적이라 데모가 항상 동일하게 재현됩니다.
+- [src/app/api/diagnose/route.ts](src/app/api/diagnose/route.ts) — `GEMINI_API_KEY` 환경변수가 있으면 Gemini가 같은 루브릭으로 채점하고, 없거나 실패하면 규칙 기반으로 자동 폴백. 클라이언트도 API 실패 시 로컬 채점으로 폴백하므로 오프라인에서도 데모가 끊기지 않습니다.
+- 캘리브레이션 검증: `npx tsx scripts/calibrate.ts` — 데모 프롬프트 22점(8/4/4/4/2), 개선 프롬프트 84점(18/18/16/18/14)을 보장합니다.
 
-## Deploy on Vercel
+## 기술 스택
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Next.js (App Router) · TypeScript · Tailwind CSS v4 · shadcn/ui · sonner
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+인증·DB 없음 — 모든 상태는 클라이언트 메모리(useState)에만 유지됩니다.
+
+## (선택) Gemini 연동
+
+```bash
+cp .env.example .env.local
+# GEMINI_API_KEY=... 입력 후 dev 서버 재시작
+```
