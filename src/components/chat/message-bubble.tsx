@@ -24,11 +24,11 @@ export function MessageBubble({ role, children, wide = false }: MessageBubblePro
       )}
       <div
         className={cn(
-          "whitespace-pre-wrap rounded-2xl px-4 py-3 text-[15px] leading-relaxed",
+          "whitespace-pre-wrap rounded-2xl px-4 py-3 text-[15px] leading-relaxed shadow-sm",
           isUser
             ? "max-w-[85%] rounded-br-sm bg-primary text-primary-foreground sm:max-w-[70%]"
             : cn(
-                "rounded-bl-sm bg-muted",
+                "rounded-bl-sm border border-primary/10 bg-card",
                 wide ? "max-w-full flex-1 sm:max-w-[92%]" : "max-w-[85%] sm:max-w-[75%]"
               )
         )}

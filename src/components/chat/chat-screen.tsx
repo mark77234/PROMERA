@@ -33,10 +33,12 @@ import type {
   Mission,
   PromptAnalysis,
   PromptDraft,
+  TrainingStats,
   UserProfile,
 } from "@/types/app";
 import { ChatSidebar } from "./chat-sidebar";
 import { MessageBubble } from "./message-bubble";
+import { RecipeDetailModal } from "./recipe-detail-modal";
 import { TypingIndicator } from "./typing-indicator";
 
 interface ChatScreenProps {
@@ -114,6 +116,43 @@ const milestoneEvent: CoachEvent = {
   badge: "LEVEL UP",
 };
 
+const defaultTrainingStats: TrainingStats = {
+  qnaCount: 0,
+  completedPrompts: 0,
+  lastIngredientCount: 0,
+  bestIngredientCount: 0,
+  totalIngredientCount: 0,
+};
+
+function normalizeTrainingStats(stats?: TrainingStats): TrainingStats {
+  return {
+    ...defaultTrainingStats,
+    ...stats,
+  };
+}
+
+function nextTrainingStats(
+  current: TrainingStats,
+  analysis: PromptAnalysis,
+  completed: boolean
+): TrainingStats {
+  const ingredientCount = analysis.presentIngredients.length;
+  const totalIngredientCount =
+    analysis.presentIngredients.length + analysis.missingIngredients.length;
+  return {
+    ...current,
+    qnaCount: current.qnaCount + 1,
+    completedPrompts: current.completedPrompts + (completed ? 1 : 0),
+    firstIngredientCount:
+      current.firstIngredientCount ?? ingredientCount,
+    lastIngredientCount: ingredientCount,
+    bestIngredientCount: Math.max(current.bestIngredientCount, ingredientCount),
+    totalIngredientCount,
+    startedAt: current.startedAt ?? new Date().toISOString(),
+    lastPracticedAt: new Date().toISOString(),
+  };
+}
+
 function sourceLabel(source?: IngredientStatus["source"]) {
   if (source === "prompt") return "입력에서 찾음";
   if (source === "saved") return "저장 정보";
@@ -138,11 +177,11 @@ function IngredientRows({
   checked: boolean;
 }) {
   return (
-    <div className="rounded-2xl border border-primary/10 bg-background/80 p-3">
+    <div className="rounded-2xl border border-primary/10 bg-card p-3">
       <p className="text-xs font-extrabold text-foreground">{title}</p>
       <div className="mt-2 space-y-1.5">
         {items.length === 0 ? (
-          <p className="rounded-xl bg-secondary/60 px-3 py-2 text-xs font-semibold text-muted-foreground">
+          <p className="rounded-xl border border-primary/10 bg-background px-3 py-2 text-xs font-semibold text-muted-foreground">
             {empty}
           </p>
         ) : (
@@ -151,7 +190,9 @@ function IngredientRows({
               key={item.id}
               className={cn(
                 "flex items-start gap-2 rounded-xl px-3 py-2 text-sm",
-                checked ? "animate-ingredient-pop bg-secondary/70" : "bg-muted/70"
+                checked
+                  ? "animate-ingredient-pop border border-primary/10 bg-secondary/45"
+                  : "border border-primary/10 bg-background"
               )}
             >
               {checked ? (
@@ -207,7 +248,7 @@ function MissionPickerMessage({
             key={mission.id}
             type="button"
             onClick={() => onSelect(mission)}
-            className="group animate-in fade-in slide-in-from-bottom-2 fill-mode-both rounded-2xl border border-primary/10 bg-background/90 p-4 text-left transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/45 hover:bg-secondary/50"
+            className="group animate-in fade-in slide-in-from-bottom-2 fill-mode-both rounded-2xl border border-primary/10 bg-card p-4 text-left shadow-sm shadow-primary/5 transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/45 hover:bg-secondary/35"
             style={{ animationDelay: `${index * 80}ms` }}
           >
             <div className="flex items-start justify-between gap-3">
@@ -227,7 +268,7 @@ function MissionPickerMessage({
 
 function CoachEventMessage({ event }: { event: CoachEvent }) {
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-primary/20 bg-secondary/70 p-4 text-secondary-foreground">
+    <div className="relative overflow-hidden rounded-2xl border border-primary/20 bg-card p-4 text-foreground shadow-sm shadow-primary/5">
       <span className="pointer-events-none absolute right-7 top-5 animate-save-sparkle" />
       <p className="text-[11px] font-extrabold uppercase tracking-widest text-primary">
         {event.badge}
@@ -267,14 +308,14 @@ function CoachMessage({
       </div>
 
       {analysis.nextIngredient && (
-        <div className="animate-in fade-in slide-in-from-bottom-2 rounded-2xl border border-primary/15 bg-secondary/60 p-4 duration-300">
+        <div className="animate-in fade-in slide-in-from-bottom-2 rounded-2xl border border-primary/15 bg-card p-4 shadow-sm shadow-primary/5 duration-300">
           <p className="text-xs font-extrabold uppercase tracking-widest text-primary">
             다음 질문
           </p>
           <p className="mt-1 text-lg font-extrabold text-foreground">
             {analysis.nextIngredient.question}
           </p>
-          <div className="mt-3 rounded-2xl bg-background/80 p-3 text-sm leading-relaxed">
+          <div className="mt-3 rounded-2xl border border-primary/10 bg-background p-3 text-sm leading-relaxed">
             <p className="flex items-center gap-1.5 font-extrabold">
               <HelpCircle className="size-4 text-primary" /> 왜 이렇게 물어봐야 할까요?
             </p>
@@ -287,7 +328,7 @@ function CoachMessage({
                 type="button"
                 onClick={() => onPick(optionValue(option))}
                 disabled={!active}
-                className="rounded-full border border-primary/15 bg-background px-3.5 py-2 text-sm font-bold text-foreground transition-all hover:-translate-y-0.5 hover:border-primary hover:bg-primary hover:text-primary-foreground disabled:pointer-events-none disabled:opacity-50"
+                className="rounded-full border border-primary/15 bg-background px-3.5 py-2 text-sm font-bold text-foreground shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary hover:bg-primary hover:text-primary-foreground disabled:pointer-events-none disabled:opacity-50"
               >
                 {option.label}
               </button>
@@ -315,6 +356,8 @@ function ResultMessage({
   onSave: () => void;
   onRestart: () => void;
 }) {
+  const [recipeOpen, setRecipeOpen] = useState(false);
+
   return (
     <div className="space-y-4">
       <div className="flex items-start gap-3">
@@ -333,30 +376,30 @@ function ResultMessage({
       </div>
 
       <div className="grid gap-3 lg:grid-cols-2">
-        <div className="rounded-2xl border border-primary/10 bg-background/80 p-4">
+        <div className="rounded-2xl border border-primary/10 bg-card p-4">
           <p className="text-xs font-extrabold text-muted-foreground">Before</p>
-          <p className="mt-2 whitespace-pre-wrap rounded-xl bg-muted/70 p-3 text-sm leading-relaxed">
+          <p className="mt-2 whitespace-pre-wrap rounded-xl border border-primary/10 bg-background p-3 text-sm leading-relaxed">
             {draft.originalPrompt}
           </p>
         </div>
-        <div className="rounded-2xl border border-primary/30 bg-secondary/60 p-4">
+        <div className="rounded-2xl border border-primary/25 bg-card p-4">
           <div className="flex items-center justify-between gap-3">
             <p className="text-xs font-extrabold text-primary">After</p>
             <CopyButton text={analysis.improvedPrompt} label="복사" />
           </div>
-          <p className="mt-2 whitespace-pre-wrap rounded-xl bg-background/85 p-3 text-sm font-semibold leading-relaxed">
+          <p className="mt-2 whitespace-pre-wrap rounded-xl bg-secondary/45 p-3 text-sm font-semibold leading-relaxed">
             {analysis.improvedPrompt}
           </p>
         </div>
       </div>
 
-      <div className="rounded-2xl border border-primary/10 bg-background/80 p-4">
+      <div className="rounded-2xl border border-primary/10 bg-card p-4">
         <p className="text-sm font-extrabold">좋아진 점</p>
         <div className="mt-2 grid gap-2 sm:grid-cols-2">
           {analysis.improvements.map((line) => (
             <p
               key={line}
-              className="animate-ingredient-pop flex items-center gap-2 rounded-xl bg-secondary/70 px-3 py-2 text-sm font-semibold"
+              className="animate-ingredient-pop flex items-center gap-2 rounded-xl border border-primary/10 bg-background px-3 py-2 text-sm font-semibold"
             >
               <CheckCircle2 className="size-4 shrink-0 text-primary" />
               {line}
@@ -365,25 +408,31 @@ function ResultMessage({
         </div>
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-2">
-        <div className="rounded-2xl border border-primary/10 bg-background/80 p-4">
-          <p className="text-xs font-extrabold text-muted-foreground">처음 결과</p>
-          <p className="mt-2 text-sm leading-relaxed">{analysis.beforePreview}</p>
-        </div>
-        <div className="rounded-2xl border border-primary/20 bg-primary text-primary-foreground p-4">
-          <p className="text-xs font-extrabold opacity-80">개선 결과</p>
-          <p className="mt-2 text-sm font-semibold leading-relaxed">
-            {analysis.afterPreview}
-          </p>
-        </div>
-      </div>
-
-      <div className="relative overflow-hidden rounded-2xl border border-primary/20 bg-background/85 p-4">
+      <div className="relative overflow-hidden rounded-2xl border border-primary/20 bg-card p-4">
         {saved && <span className="pointer-events-none absolute right-7 top-5 animate-save-sparkle" />}
-        <p className="text-sm font-extrabold">내 프롬프트 레시피</p>
-        <pre className="mt-2 whitespace-pre-wrap rounded-xl bg-muted/70 p-3 font-sans text-sm leading-relaxed">
-          {analysis.recipeTemplate}
-        </pre>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-sm font-extrabold">내 프롬프트 레시피</p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              저장하면 좌측 레시피에서 다시 펼쳐볼 수 있어요.
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setRecipeOpen((open) => !open)}
+            className="h-10 rounded-xl font-bold"
+          >
+            {recipeOpen ? "접기" : "레시피 자세히 보기"}
+          </Button>
+        </div>
+        <RecipeDetailModal
+          title="완성한 프롬프트 레시피"
+          template={analysis.recipeTemplate}
+          prompt={analysis.improvedPrompt}
+          open={recipeOpen}
+          onOpenChange={setRecipeOpen}
+        />
         <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:justify-end">
           <Button
             type="button"
@@ -416,6 +465,10 @@ export function ChatScreen({
   const purposeId = user.purposeId ?? "other";
   const missions = useMemo(() => getMissionsByPurpose(purposeId), [purposeId]);
   const recipes = user.promptRecipes ?? [];
+  const trainingStats = useMemo(
+    () => normalizeTrainingStats(user.trainingStats),
+    [user.trainingStats]
+  );
   const [items, setItems] = useState<CoachChatItem[]>([]);
   const [typing, setTyping] = useState(false);
   const [input, setInput] = useState("");
@@ -428,9 +481,16 @@ export function ChatScreen({
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const repeatMapRef = useRef<Record<string, number>>({});
   const milestoneRef = useRef<Set<string>>(new Set());
+  const statsRef = useRef(trainingStats);
 
   const currentAnalysis =
     selectedMission && draft ? analyzeDraft(selectedMission, draft) : null;
+
+  useEffect(() => {
+    if (trainingStats.qnaCount >= statsRef.current.qnaCount) {
+      statsRef.current = trainingStats;
+    }
+  }, [trainingStats]);
 
   const later = useCallback((fn: () => void, ms: number) => {
     const timer = setTimeout(fn, ms);
@@ -455,6 +515,12 @@ export function ChatScreen({
     repeatMapRef.current[key] = nextCount;
     if (nextCount < 2) return null;
     return repeatEvents[(nextCount - 2) % repeatEvents.length];
+  };
+
+  const recordPracticeTurn = (analysis: PromptAnalysis, completed = false) => {
+    const nextStats = nextTrainingStats(statsRef.current, analysis, completed);
+    statsRef.current = nextStats;
+    return nextStats;
   };
 
   const buildResponseItems = (
@@ -577,6 +643,8 @@ export function ChatScreen({
     const mission = selectedMission ?? missions[0];
     const repeatEvent = registerRepeatEvent(text);
     const nextDraft = createDraft(mission, text, user.savedContext);
+    const nextAnalysis = analyzeDraft(mission, nextDraft);
+    const nextStats = recordPracticeTurn(nextAnalysis, nextAnalysis.complete);
     setSelectedMission(mission);
     setDraft(nextDraft);
     setInput("");
@@ -586,6 +654,7 @@ export function ChatScreen({
     ]);
 
     const events = repeatEvent ? [repeatEvent] : [];
+    onUpdateUser({ trainingStats: nextStats });
     scheduleAssistant(buildResponseItems(mission, nextDraft, "first", events), 950);
   };
 
@@ -597,11 +666,13 @@ export function ChatScreen({
     const ingredient = currentAnalysis.nextIngredient;
     const repeatEvent = registerRepeatEvent(trimmedValue);
     if (repeatEvent && source === "typed") {
+      const nextStats = recordPracticeTurn(currentAnalysis, false);
       setInput("");
       setItems((prev) => [
         ...prev,
         { id: uid(), role: "user", kind: "text", text: trimmedValue },
       ]);
+      onUpdateUser({ trainingStats: nextStats });
       scheduleAssistant(
         buildResponseItems(selectedMission, draft, "answer", [repeatEvent]),
         750
@@ -611,6 +682,7 @@ export function ChatScreen({
 
     const nextDraft = updateDraftValue(draft, ingredient.id, trimmedValue, source);
     const nextAnalysis = analyzeDraft(selectedMission, nextDraft);
+    const nextStats = recordPracticeTurn(nextAnalysis, nextAnalysis.complete);
     const nextEvents: CoachEvent[] = [];
     const milestoneKey = `${selectedMission.id}-3`;
 
@@ -631,15 +703,19 @@ export function ChatScreen({
       { id: uid(), role: "user", kind: "text", text: trimmedValue },
     ]);
 
+    const userPatch: Partial<UserProfile> = {
+      trainingStats: nextStats,
+    };
+
     if (ingredient.savedContextKey) {
-      onUpdateUser({
-        savedContext: {
-          ...user.savedContext,
-          purposeId,
-          [ingredient.savedContextKey]: trimmedValue,
-        },
-      });
+      userPatch.savedContext = {
+        ...user.savedContext,
+        purposeId,
+        [ingredient.savedContextKey]: trimmedValue,
+      };
     }
+
+    onUpdateUser(userPatch);
 
     scheduleAssistant(buildResponseItems(selectedMission, nextDraft, "answer", nextEvents), 850);
   };
@@ -701,7 +777,7 @@ export function ChatScreen({
     <div className="flex h-dvh bg-background">
       <ChatSidebar
         user={user}
-        turn={recipes.length}
+        stats={trainingStats}
         recipes={recipes}
         onChangePurpose={onChangePurpose}
         onLogout={onLogout}
@@ -718,7 +794,7 @@ export function ChatScreen({
             </span>
           </div>
           <span className="rounded-full bg-secondary px-3 py-1 text-xs font-bold text-secondary-foreground">
-            레시피 {recipes.length}개
+            질의응답 {trainingStats.qnaCount}회
           </span>
         </header>
 

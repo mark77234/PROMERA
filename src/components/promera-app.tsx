@@ -108,7 +108,7 @@ export function PromeraApp() {
 
   // 온보딩 ~ 목적 서술: 공통 셸(로고 헤더 + 중앙 컨텐츠)
   return (
-    <div className="min-h-dvh bg-gradient-to-b from-secondary/30 to-background">
+    <div className="min-h-dvh bg-background">
       <header className="flex h-14 items-center justify-between px-5">
         <button
           type="button"

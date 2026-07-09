@@ -10,6 +10,7 @@ export interface UserProfile {
   purposeDetail?: string;
   savedContext?: SavedContext;
   promptRecipes?: PromptRecipe[];
+  trainingStats?: TrainingStats;
 }
 
 export interface LevelSurveyAnswers {
@@ -125,6 +126,17 @@ export interface PromptRecipe {
   template: string;
   prompt: string;
   createdAt: string;
+}
+
+export interface TrainingStats {
+  qnaCount: number;
+  completedPrompts: number;
+  firstIngredientCount?: number;
+  lastIngredientCount: number;
+  bestIngredientCount: number;
+  totalIngredientCount: number;
+  startedAt?: string;
+  lastPracticedAt?: string;
 }
 
 export type ChatRole = "assistant" | "user";

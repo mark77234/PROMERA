@@ -40,8 +40,8 @@ const marketingIngredients: PromptIngredient[] = [
     why: "대상이 정해지면 말투, 단어 선택, 강조할 장점이 훨씬 정확해져요.",
     placeholder: "예: 20대 손님",
     options: [
+      { label: "해운대 관광객", value: "해운대 산책 중인 20대 관광객" },
       { label: "20대 손님", value: "20대 손님" },
-      { label: "관광객", value: "관광객" },
       { label: "동네 주민", value: "동네 주민" },
       { label: "가족 단위 손님", value: "가족 단위 손님" },
     ],
@@ -56,7 +56,7 @@ const marketingIngredients: PromptIngredient[] = [
     why: "상품 정보가 없으면 AI가 '맛있는 커피와 디저트'처럼 평범한 말만 하게 돼요.",
     placeholder: "예: 딸기 크림 라떼",
     options: [
-      { label: "딸기 크림 라떼", value: "딸기 크림 라떼" },
+      { label: "딸기 크림 라떼", value: "신메뉴 딸기 크림 라떼" },
       { label: "바스크 치즈케이크", value: "바스크 치즈케이크" },
       { label: "주말 세트 메뉴", value: "주말 세트 메뉴" },
       { label: "시즌 한정 디저트", value: "시즌 한정 디저트" },
@@ -88,7 +88,7 @@ const marketingIngredients: PromptIngredient[] = [
     why: "말투를 알려주면 AI가 브랜드 분위기에 맞는 단어를 고를 수 있어요.",
     placeholder: "예: 밝고 귀여운 말투",
     options: [
-      { label: "밝게", value: "밝고 경쾌한 말투" },
+      { label: "밝고 감성적으로", value: "밝고 감성적인 말투" },
       { label: "고급스럽게", value: "고급스럽고 차분한 말투" },
       { label: "친근하게", value: "친근한 말투" },
       { label: "재밌게", value: "재밌고 센스 있는 말투" },
@@ -499,11 +499,11 @@ export const promptMissions: Record<string, Mission[]> = {
       emoji: "📣",
       title: "인스타 홍보글 만들기",
       description: "신메뉴나 이벤트를 알리는 게시글 프롬프트를 완성해요.",
-      situation: "신메뉴를 알리는 인스타그램 글을 만들고 싶어요. AI에게 어떻게 물어볼까요?",
-      starterPrompt: "우리 카페 홍보글 써줘",
+      situation: "부산 해운대 카페에서 신메뉴 딸기 크림 라떼를 인스타그램으로 알리고 싶어요. AI에게 어떻게 물어볼까요?",
+      starterPrompt: "우리 카페 신메뉴 홍보글 써줘",
       ingredients: marketingIngredients,
       promptTemplate:
-        "{location}에서 운영하는 카페입니다.\n{audience}에게 {product}를 알리는 {platform} 글을 {tone}로 {length} 작성해주세요.",
+        "{location}에서 운영하는 카페입니다.\n{audience}에게 {product}를 알리는 {platform} 게시글을 작성해주세요.\n말투는 {tone}로 하고, 전체 길이는 {length}로 맞춰주세요.\n첫 문장은 방문하고 싶게 시작하고, 메뉴의 매력과 방문 유도 문장을 포함해주세요.",
       recipeTemplate:
         "나는 [지역]에서 [가게 종류]를 운영 중이야.\n[대상 고객]에게 [상품/이벤트]를 알리는\n[플랫폼] 글을 [말투]로 [글자 수] 작성해줘.",
       beforePreview: "우리 카페에 방문해보세요. 맛있는 커피와 디저트가 있습니다.",

@@ -27,8 +27,8 @@ export function LoginScreen({ onLogin, onBack }: LoginScreenProps) {
   };
 
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-gradient-to-b from-secondary/50 to-background px-4">
-      <div className="animate-in fade-in zoom-in-95 w-full max-w-md rounded-3xl border bg-background p-8 shadow-xl duration-500">
+    <div className="flex min-h-dvh items-center justify-center bg-background px-4">
+      <div className="animate-in fade-in zoom-in-95 w-full max-w-md rounded-3xl border border-primary/10 bg-card p-8 shadow-xl shadow-primary/8 duration-500">
         <button
           type="button"
           onClick={onBack}
