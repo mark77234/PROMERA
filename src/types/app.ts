@@ -79,6 +79,8 @@ export interface PromptIngredient {
 
 export interface Mission {
   id: string;
+  /** AI 맞춤 미션이 기반으로 사용하는 서버 등록 미션 id */
+  sourceMissionId?: string;
   purposeId: string;
   emoji: string;
   title: string;
@@ -90,6 +92,29 @@ export interface Mission {
   recipeTemplate: string;
   beforePreview: string;
   afterPreviewTemplate: string;
+}
+
+export interface PersonalizedMission {
+  id: string;
+  sourceMissionId: string;
+  purposeId: string;
+  emoji: string;
+  title: string;
+  description: string;
+  situation: string;
+  starterPrompt: string;
+}
+
+export interface MissionGenerationResult {
+  missions: PersonalizedMission[];
+  engine: "mock" | "ai";
+  model: string | null;
+}
+
+export interface MissionContext {
+  title: string;
+  description: string;
+  situation: string;
 }
 
 export interface PromptDraft {

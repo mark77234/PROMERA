@@ -6,6 +6,7 @@ import type {
   CoachNextContent,
   CoachTurnResult,
   Mission,
+  MissionContext,
   PromptDraft,
   PromptIngredient,
 } from "@/types/app";
@@ -21,6 +22,7 @@ interface CoachRequest {
   knownValues?: Record<string, unknown>;
   savedValues?: Record<string, unknown>;
   profile?: unknown;
+  missionContext?: unknown;
 }
 
 type Engine = "mock" | "ai";
@@ -156,6 +158,15 @@ function cleanProfile(value: unknown): JsonObject {
   }
 
   return profile;
+}
+
+function cleanMissionContext(value: unknown): MissionContext | undefined {
+  if (!isRecord(value)) return undefined;
+  const title = cleanString(value.title, 44);
+  const description = cleanString(value.description, 120);
+  const situation = cleanString(value.situation, 300);
+  if (!title || !description || !situation) return undefined;
+  return { title, description, situation };
 }
 
 function ingredientSpec(ingredient: PromptIngredient): string {
@@ -528,7 +539,8 @@ async function startWithAI(
   mission: Mission,
   prompt: string,
   savedValues: Record<string, string>,
-  profile: JsonObject
+  profile: JsonObject,
+  missionContext?: MissionContext
 ): Promise<CoachTurnResult> {
   const parsed = await callOpenAI(
     apiKey,
@@ -539,6 +551,7 @@ async function startWithAI(
       "첫 코칭 턴을 생성해라.",
       `사용자가 처음 작성한 프롬프트: ${JSON.stringify(prompt)}`,
       `이미 저장되어 자동 적용할 정보: ${JSON.stringify(savedValues)}`,
+      `사용자가 선택한 맞춤 미션: ${JSON.stringify(missionContext ?? null)}`,
       "",
       "values에는 처음 작성한 프롬프트에 명시된 값만 넣고, 저장 정보에서 가져온 값은 넣지 않는다.",
       "각 필수 정보 id를 모두 출력하되, 프롬프트에 없는 값은 null로 둔다.",
@@ -569,7 +582,8 @@ async function answerWithAI(
   knownValues: Record<string, string>,
   ingredient: PromptIngredient,
   answer: string,
-  profile: JsonObject
+  profile: JsonObject,
+  missionContext?: MissionContext
 ): Promise<CoachTurnResult> {
   const expectedValues = { ...knownValues, [ingredient.id]: "답변 확인됨" };
   const nextIngredient = mission.ingredients.find(
@@ -581,6 +595,7 @@ async function answerWithAI(
     `현재까지 확정된 정보: ${JSON.stringify(knownValues)}`,
     `이번에 답한 정보: ${ingredient.id} (${ingredient.label})`,
     `사용자 답변: ${JSON.stringify(answer)}`,
+    `사용자가 선택한 맞춤 미션: ${JSON.stringify(missionContext ?? null)}`,
     nextIngredient
       ? `다음 질문 대상은 반드시 ${nextIngredient.id} (${nextIngredient.label})다.`
       : "이번 답변으로 모든 필수 정보가 채워졌으므로 완성 콘텐츠를 만든다.",
@@ -656,6 +671,7 @@ export async function POST(request: Request) {
   }
 
   const profile = cleanProfile(body.profile);
+  const missionContext = cleanMissionContext(body.missionContext);
 
   try {
     if (body.action === "start") {
@@ -672,7 +688,14 @@ export async function POST(request: Request) {
         });
       }
 
-      const result = await startWithAI(apiKey as string, mission, prompt, savedValues, profile);
+      const result = await startWithAI(
+        apiKey as string,
+        mission,
+        prompt,
+        savedValues,
+        profile,
+        missionContext
+      );
       return json({ ...result, model: getModel() });
     }
 
@@ -709,7 +732,8 @@ export async function POST(request: Request) {
         knownValues,
         ingredient,
         answer,
-        profile
+        profile,
+        missionContext
       );
       return json({ ...result, model: getModel() });
     }

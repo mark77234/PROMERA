@@ -29,12 +29,17 @@ import {
   savedValuesFor,
   updateDraftValue,
 } from "@/lib/prompt-coach";
-import { answerCoachTurn, startCoachTurn } from "@/lib/coach-client";
+import {
+  answerCoachTurn,
+  generatePersonalizedMissions,
+  startCoachTurn,
+} from "@/lib/coach-client";
 import { cn, withHonorific } from "@/lib/utils";
 import type {
   CoachProfile,
   IngredientStatus,
   Mission,
+  PersonalizedMission,
   PromptAnalysis,
   PromptDraft,
   TrainingStats,
@@ -69,6 +74,12 @@ type CoachChatItem =
       id: string;
       role: "assistant";
       kind: "missions";
+    }
+  | {
+      id: string;
+      role: "assistant";
+      kind: "mission-error";
+      message: string;
     }
   | {
       id: string;
@@ -169,6 +180,22 @@ function normalizeRepeatKey(value: string) {
   return value.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
+function hydratePersonalizedMissions(
+  personalized: PersonalizedMission[],
+  bases: Mission[]
+): Mission[] {
+  return personalized.flatMap((mission) => {
+    const base = bases.find((item) => item.id === mission.sourceMissionId);
+    if (!base) return [];
+    return [
+      {
+        ...base,
+        ...mission,
+      },
+    ];
+  });
+}
+
 function IngredientRows({
   title,
   empty,
@@ -238,11 +265,11 @@ function MissionPickerMessage({
         <Mascot name="seat" className="size-16 animate-prom-bob" sizes="64px" />
         <div>
           <p className="text-xs font-extrabold uppercase tracking-widest text-primary">
-            PROMERA Mission
+            AI Personalized Mission
           </p>
-          <p className="mt-1 text-lg font-extrabold">오늘의 미션을 골라보세요</p>
+          <p className="mt-1 text-lg font-extrabold">나에게 맞춘 미션을 골라보세요</p>
           <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-            챗봇처럼 대화하면서 필요한 재료를 하나씩 채워볼게요.
+            선택한 카테고리와 상세 목표를 반영해 AI가 새로 만들었어요.
           </p>
         </div>
       </div>
@@ -266,6 +293,34 @@ function MissionPickerMessage({
           </button>
         ))}
       </div>
+    </div>
+  );
+}
+
+function MissionErrorMessage({
+  message,
+  onRetry,
+  disabled,
+}: {
+  message: string;
+  onRetry: () => void;
+  disabled: boolean;
+}) {
+  return (
+    <div className="space-y-3">
+      <div>
+        <p className="font-extrabold">맞춤 미션을 준비하지 못했어요</p>
+        <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{message}</p>
+      </div>
+      <Button
+        type="button"
+        variant="outline"
+        onClick={onRetry}
+        disabled={disabled}
+        className="h-10 rounded-xl font-bold"
+      >
+        <RefreshCw className="size-4" /> 다시 만들기
+      </Button>
     </div>
   );
 }
@@ -467,13 +522,14 @@ export function ChatScreen({
   onLogout,
 }: ChatScreenProps) {
   const purposeId = user.purposeId ?? "other";
-  const missions = useMemo(() => getMissionsByPurpose(purposeId), [purposeId]);
+  const baseMissions = useMemo(() => getMissionsByPurpose(purposeId), [purposeId]);
   const recipes = user.promptRecipes ?? [];
   const trainingStats = useMemo(
     () => normalizeTrainingStats(user.trainingStats),
     [user.trainingStats]
   );
   const [items, setItems] = useState<CoachChatItem[]>([]);
+  const [missions, setMissions] = useState<Mission[]>([]);
   const [typing, setTyping] = useState(false);
   const [input, setInput] = useState("");
   const [selectedMission, setSelectedMission] = useState<Mission | null>(null);
@@ -486,19 +542,30 @@ export function ChatScreen({
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const repeatMapRef = useRef<Record<string, number>>({});
   const milestoneRef = useRef<Set<string>>(new Set());
+  const missionRequestRef = useRef(0);
   const statsRef = useRef(trainingStats);
 
   const currentAnalysis = selectedMission && draft
     ? activeAnalysis ?? analyzeDraft(selectedMission, draft)
     : null;
-  const coachProfile: CoachProfile = {
-    name: user.name,
-    ageGroup: user.ageGroup,
-    job: user.job,
-    purposeLabel: user.purposeLabel ?? "",
-    purposeDetail: user.purposeDetail ?? "",
-    surveyAnswers: user.surveyAnswers,
-  };
+  const coachProfile = useMemo<CoachProfile>(
+    () => ({
+      name: user.name,
+      ageGroup: user.ageGroup,
+      job: user.job,
+      purposeLabel: user.purposeLabel ?? "",
+      purposeDetail: user.purposeDetail ?? "",
+      surveyAnswers: user.surveyAnswers,
+    }),
+    [
+      user.ageGroup,
+      user.job,
+      user.name,
+      user.purposeDetail,
+      user.purposeLabel,
+      user.surveyAnswers,
+    ]
+  );
 
   useEffect(() => {
     if (trainingStats.qnaCount >= statsRef.current.qnaCount) {
@@ -521,6 +588,47 @@ export function ChatScreen({
     },
     [later]
   );
+
+  const loadPersonalizedMissions = useCallback(async () => {
+    const requestId = ++missionRequestRef.current;
+    setTyping(true);
+    setItems((prev) =>
+      prev.filter((item) => item.kind !== "missions" && item.kind !== "mission-error")
+    );
+
+    try {
+      const result = await generatePersonalizedMissions(purposeId, coachProfile);
+      if (missionRequestRef.current !== requestId) return;
+      const nextMissions = hydratePersonalizedMissions(result.missions, baseMissions);
+      if (nextMissions.length !== 3) {
+        throw new Error("AI가 맞춤 미션 3개를 완성하지 못했어요.");
+      }
+      setMissions(nextMissions);
+      setTyping(false);
+      setItems((prev) => [
+        ...prev,
+        { id: uid(), role: "assistant", kind: "missions" },
+      ]);
+    } catch (error) {
+      if (missionRequestRef.current !== requestId) return;
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : "맞춤 미션 생성 중 오류가 발생했어요.";
+      setMissions([]);
+      setTyping(false);
+      toast.error(message);
+      setItems((prev) => [
+        ...prev,
+        {
+          id: uid(),
+          role: "assistant",
+          kind: "mission-error",
+          message,
+        },
+      ]);
+    }
+  }, [baseMissions, coachProfile, purposeId]);
 
   const registerRepeatEvent = (text: string) => {
     const key = normalizeRepeatKey(text);
@@ -625,7 +733,6 @@ export function ChatScreen({
 
     setTyping(true);
     later(() => {
-      setTyping(false);
       setItems([
         {
           id: uid(),
@@ -635,27 +742,17 @@ export function ChatScreen({
         },
       ]);
     }, 800);
-    later(() => setTyping(true), 1150);
-    later(() => {
-      setTyping(false);
-      setItems((prev) => [
-        ...prev,
-        {
-          id: uid(),
-          role: "assistant",
-          kind: "missions",
-        },
-      ]);
-    }, 1900);
+    later(() => void loadPersonalizedMissions(), 1150);
 
     const timers = timersRef.current;
     return () => {
       timers.forEach(clearTimeout);
+      missionRequestRef.current += 1;
       initRef.current = false;
       setTyping(false);
       setItems([]);
     };
-  }, [later, user.name, user.purposeDetail]);
+  }, [later, loadPersonalizedMissions, user.name, user.purposeDetail]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -685,6 +782,10 @@ export function ChatScreen({
 
   const startDraft = async (text: string) => {
     const mission = selectedMission ?? missions[0];
+    if (!mission) {
+      toast.info("맞춤 미션을 먼저 만들어주세요.");
+      return;
+    }
     const repeatEvent = registerRepeatEvent(text);
     setSelectedMission(mission);
     setInput("");
@@ -858,6 +959,10 @@ export function ChatScreen({
 
   const fillExample = () => {
     const mission = selectedMission ?? missions[0];
+    if (!mission) {
+      toast.info("맞춤 미션을 먼저 만들어주세요.");
+      return;
+    }
     setSelectedMission(mission);
     setInput(mission.starterPrompt);
   };
@@ -866,7 +971,9 @@ export function ChatScreen({
     ? currentAnalysis.nextIngredient.placeholder
     : selectedMission
       ? selectedMission.starterPrompt
-      : "미션을 고르거나, 지금 만들고 싶은 프롬프트를 입력해보세요.";
+      : missions.length > 0
+        ? "미션을 고르거나, 지금 만들고 싶은 프롬프트를 입력해보세요."
+        : "AI가 맞춤 미션을 준비하고 있어요.";
 
   return (
     <div className="flex h-dvh bg-background">
@@ -928,6 +1035,17 @@ export function ChatScreen({
                   </MessageBubble>
                 );
               }
+              if (item.kind === "mission-error") {
+                return (
+                  <MessageBubble key={item.id} role="assistant" wide>
+                    <MissionErrorMessage
+                      message={item.message}
+                      onRetry={() => void loadPersonalizedMissions()}
+                      disabled={typing}
+                    />
+                  </MessageBubble>
+                );
+              }
               if (item.kind === "coach") {
                 return (
                   <MessageBubble key={item.id} role="assistant" wide>
@@ -975,7 +1093,8 @@ export function ChatScreen({
             <button
               type="button"
               onClick={fillExample}
-              className="flex items-center gap-1.5 text-xs font-extrabold text-primary underline-offset-2 hover:underline"
+              disabled={missions.length === 0}
+              className="flex items-center gap-1.5 text-xs font-extrabold text-primary underline-offset-2 hover:underline disabled:pointer-events-none disabled:opacity-45"
             >
               <Sparkles className="size-3.5" /> 예시 프롬프트 채우기
             </button>
@@ -990,12 +1109,13 @@ export function ChatScreen({
                   }
                 }}
                 placeholder={inputPlaceholder}
+                disabled={!selectedMission && missions.length === 0}
                 className="max-h-40 min-h-11 flex-1 resize-none border-0 bg-transparent p-0 py-2.5 text-[15px] shadow-none focus-visible:ring-0"
               />
               <Button
                 size="lg"
                 onClick={send}
-                disabled={!input.trim() || typing}
+                disabled={!input.trim() || typing || missions.length === 0}
                 aria-label={currentAnalysis?.nextIngredient ? "답변 보내기" : "프롬프트 보내기"}
                 className="size-11 shrink-0 rounded-2xl p-0 transition-transform hover:scale-105 active:scale-95"
               >
