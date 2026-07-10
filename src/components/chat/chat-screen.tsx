@@ -22,11 +22,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { getMissionsByPurpose } from "@/data/prompt-missions";
 import {
   analyzeDraft,
-  createDraft,
+  buildDraft,
   createRecipe,
   optionValue,
   updateDraftValue,
 } from "@/lib/prompt-coach";
+import { extractValuesRemote, normalizeAnswerRemote } from "@/lib/coach-client";
 import { cn, withHonorific } from "@/lib/utils";
 import type {
   IngredientStatus,
@@ -517,6 +518,35 @@ export function ChatScreen({
     return repeatEvents[(nextCount - 2) % repeatEvents.length];
   };
 
+  // AI 오류로 입력을 되돌릴 때 반복 카운트도 함께 되돌린다 —
+  // 같은 내용을 재전송해도 반복 이벤트로 오인하지 않게.
+  const unregisterRepeat = (text: string) => {
+    const key = normalizeRepeatKey(text);
+    if (!key) return;
+    const count = repeatMapRef.current[key] ?? 0;
+    if (count > 0) repeatMapRef.current[key] = count - 1;
+  };
+
+  const failWithAIError = (error: unknown, restoreText: string) => {
+    const message =
+      error instanceof Error && error.message
+        ? error.message
+        : "AI 응답을 받지 못했어요.";
+    unregisterRepeat(restoreText);
+    setTyping(false);
+    setInput(restoreText);
+    toast.error(message);
+    setItems((prev) => [
+      ...prev,
+      {
+        id: uid(),
+        role: "assistant",
+        kind: "text",
+        text: `⚠️ ${message}\n\n입력창에 내용을 되돌려놨어요. 설정(.env.local)이나 네트워크를 확인한 뒤 다시 보내주세요.`,
+      },
+    ]);
+  };
+
   const recordPracticeTurn = (analysis: PromptAnalysis, completed = false) => {
     const nextStats = nextTrainingStats(statsRef.current, analysis, completed);
     statsRef.current = nextStats;
@@ -639,26 +669,42 @@ export function ChatScreen({
     ]);
   };
 
-  const startDraft = (text: string) => {
+  const startDraft = async (text: string) => {
     const mission = selectedMission ?? missions[0];
     const repeatEvent = registerRepeatEvent(text);
-    const nextDraft = createDraft(mission, text, user.savedContext);
-    const nextAnalysis = analyzeDraft(mission, nextDraft);
-    const nextStats = recordPracticeTurn(nextAnalysis, nextAnalysis.complete);
     setSelectedMission(mission);
-    setDraft(nextDraft);
     setInput("");
     setItems((prev) => [
       ...prev,
       { id: uid(), role: "user", kind: "text", text },
     ]);
 
-    const events = repeatEvent ? [repeatEvent] : [];
+    // 서버(/api/coach)가 목업/실제 AI 여부를 결정한다.
+    // 최소 900ms 대기로 응답이 빨라도 대화 호흡을 유지한다.
+    setTyping(true);
+    let promptValues: Record<string, string>;
+    try {
+      [promptValues] = await Promise.all([
+        extractValuesRemote(mission, text),
+        new Promise((resolve) => later(() => resolve(null), 900)),
+      ]);
+    } catch (error) {
+      failWithAIError(error, text);
+      return;
+    }
+
+    const nextDraft = buildDraft(mission, text, promptValues, user.savedContext);
+    const nextAnalysis = analyzeDraft(mission, nextDraft);
+    const nextStats = recordPracticeTurn(nextAnalysis, nextAnalysis.complete);
+    setDraft(nextDraft);
     onUpdateUser({ trainingStats: nextStats });
-    scheduleAssistant(buildResponseItems(mission, nextDraft, "first", events), 950);
+
+    const events = repeatEvent ? [repeatEvent] : [];
+    setTyping(false);
+    setItems((prev) => [...prev, ...buildResponseItems(mission, nextDraft, "first", events)]);
   };
 
-  const submitIngredientAnswer = (value: string, source: "chip" | "typed") => {
+  const submitIngredientAnswer = async (value: string, source: "chip" | "typed") => {
     if (!selectedMission || !draft || !currentAnalysis?.nextIngredient) return;
     const trimmedValue = value.trim();
     if (!trimmedValue) return;
@@ -680,7 +726,28 @@ export function ChatScreen({
       return;
     }
 
-    const nextDraft = updateDraftValue(draft, ingredient.id, trimmedValue, source);
+    // 직접 입력한 답은 실제 AI 모드에서 간결한 구로 정리된다 (목업이면 그대로).
+    let finalValue = trimmedValue;
+    if (source === "typed") {
+      setInput("");
+      setItems((prev) => [
+        ...prev,
+        { id: uid(), role: "user", kind: "text", text: trimmedValue },
+      ]);
+      setTyping(true);
+      try {
+        const [normalized] = await Promise.all([
+          normalizeAnswerRemote(selectedMission, ingredient.id, trimmedValue),
+          new Promise((resolve) => later(() => resolve(null), 850)),
+        ]);
+        finalValue = normalized;
+      } catch (error) {
+        failWithAIError(error, trimmedValue);
+        return;
+      }
+    }
+
+    const nextDraft = updateDraftValue(draft, ingredient.id, finalValue, source);
     const nextAnalysis = analyzeDraft(selectedMission, nextDraft);
     const nextStats = recordPracticeTurn(nextAnalysis, nextAnalysis.complete);
     const nextEvents: CoachEvent[] = [];
@@ -697,11 +764,14 @@ export function ChatScreen({
     }
 
     setDraft(nextDraft);
-    setInput("");
-    setItems((prev) => [
-      ...prev,
-      { id: uid(), role: "user", kind: "text", text: trimmedValue },
-    ]);
+    if (source === "chip") {
+      // typed 경로는 정리(normalize) 전에 이미 사용자 메시지를 추가했다.
+      setInput("");
+      setItems((prev) => [
+        ...prev,
+        { id: uid(), role: "user", kind: "text", text: trimmedValue },
+      ]);
+    }
 
     const userPatch: Partial<UserProfile> = {
       trainingStats: nextStats,
@@ -711,13 +781,16 @@ export function ChatScreen({
       userPatch.savedContext = {
         ...user.savedContext,
         purposeId,
-        [ingredient.savedContextKey]: trimmedValue,
+        [ingredient.savedContextKey]: finalValue,
       };
     }
 
     onUpdateUser(userPatch);
 
-    scheduleAssistant(buildResponseItems(selectedMission, nextDraft, "answer", nextEvents), 850);
+    scheduleAssistant(
+      buildResponseItems(selectedMission, nextDraft, "answer", nextEvents),
+      source === "typed" ? 350 : 850
+    );
   };
 
   const send = () => {
@@ -725,11 +798,11 @@ export function ChatScreen({
     if (!text || typing) return;
 
     if (draft && currentAnalysis?.nextIngredient) {
-      submitIngredientAnswer(text, "typed");
+      void submitIngredientAnswer(text, "typed");
       return;
     }
 
-    startDraft(text);
+    void startDraft(text);
   };
 
   const saveRecipe = (

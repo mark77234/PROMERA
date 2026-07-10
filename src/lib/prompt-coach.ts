@@ -106,9 +106,28 @@ export function deriveSavedContext(purposeId: string, detail: string): SavedCont
   return context;
 }
 
-export function createDraft(
+/** 프롬프트 텍스트에서 재료 값만 추출한다 (규칙 기반 — 목업 엔진의 핵심) */
+export function extractPromptValues(
+  mission: Mission,
+  originalPrompt: string
+): Record<string, string> {
+  const values: Record<string, string> = {};
+  const prompt = normalizeWhitespace(originalPrompt);
+  for (const ingredient of mission.ingredients) {
+    const promptValue = extractByPattern(prompt, ingredient);
+    if (promptValue) values[ingredient.id] = promptValue;
+  }
+  return values;
+}
+
+/**
+ * 추출된 프롬프트 값(규칙 기반이든 실제 AI든)과 저장 정보를 합쳐
+ * 출처 라벨이 붙은 드래프트를 만든다.
+ */
+export function buildDraft(
   mission: Mission,
   originalPrompt: string,
+  promptValues: Record<string, string>,
   savedContext?: SavedContext
 ): PromptDraft {
   const values: Record<string, string> = {};
@@ -116,9 +135,9 @@ export function createDraft(
   const prompt = normalizeWhitespace(originalPrompt);
 
   for (const ingredient of mission.ingredients) {
-    const promptValue = extractByPattern(prompt, ingredient);
+    const promptValue = promptValues[ingredient.id];
     if (promptValue) {
-      values[ingredient.id] = promptValue;
+      values[ingredient.id] = normalizeWhitespace(promptValue);
       sources[ingredient.id] = "prompt";
       continue;
     }
@@ -136,6 +155,19 @@ export function createDraft(
     values,
     sources,
   };
+}
+
+export function createDraft(
+  mission: Mission,
+  originalPrompt: string,
+  savedContext?: SavedContext
+): PromptDraft {
+  return buildDraft(
+    mission,
+    originalPrompt,
+    extractPromptValues(mission, originalPrompt),
+    savedContext
+  );
 }
 
 export function updateDraftValue(
