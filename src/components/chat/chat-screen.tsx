@@ -21,16 +21,25 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { getMissionsByPurpose } from "@/data/prompt-missions";
 import {
+  analyzeCoachTurn,
   analyzeDraft,
-  createDraft,
+  buildDraft,
   createRecipe,
   optionValue,
+  savedValuesFor,
   updateDraftValue,
 } from "@/lib/prompt-coach";
+import {
+  answerCoachTurn,
+  generatePersonalizedMissions,
+  startCoachTurn,
+} from "@/lib/coach-client";
 import { cn, withHonorific } from "@/lib/utils";
 import type {
+  CoachProfile,
   IngredientStatus,
   Mission,
+  PersonalizedMission,
   PromptAnalysis,
   PromptDraft,
   TrainingStats,
@@ -65,6 +74,12 @@ type CoachChatItem =
       id: string;
       role: "assistant";
       kind: "missions";
+    }
+  | {
+      id: string;
+      role: "assistant";
+      kind: "mission-error";
+      message: string;
     }
   | {
       id: string;
@@ -165,6 +180,22 @@ function normalizeRepeatKey(value: string) {
   return value.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
+function hydratePersonalizedMissions(
+  personalized: PersonalizedMission[],
+  bases: Mission[]
+): Mission[] {
+  return personalized.flatMap((mission) => {
+    const base = bases.find((item) => item.id === mission.sourceMissionId);
+    if (!base) return [];
+    return [
+      {
+        ...base,
+        ...mission,
+      },
+    ];
+  });
+}
+
 function IngredientRows({
   title,
   empty,
@@ -234,11 +265,11 @@ function MissionPickerMessage({
         <Mascot name="seat" className="size-16 animate-prom-bob" sizes="64px" />
         <div>
           <p className="text-xs font-extrabold uppercase tracking-widest text-primary">
-            PROMERA Mission
+            AI Personalized Mission
           </p>
-          <p className="mt-1 text-lg font-extrabold">오늘의 미션을 골라보세요</p>
+          <p className="mt-1 text-lg font-extrabold">나에게 맞춘 미션을 골라보세요</p>
           <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-            챗봇처럼 대화하면서 필요한 재료를 하나씩 채워볼게요.
+            선택한 카테고리와 상세 목표를 반영해 AI가 새로 만들었어요.
           </p>
         </div>
       </div>
@@ -262,6 +293,34 @@ function MissionPickerMessage({
           </button>
         ))}
       </div>
+    </div>
+  );
+}
+
+function MissionErrorMessage({
+  message,
+  onRetry,
+  disabled,
+}: {
+  message: string;
+  onRetry: () => void;
+  disabled: boolean;
+}) {
+  return (
+    <div className="space-y-3">
+      <div>
+        <p className="font-extrabold">맞춤 미션을 준비하지 못했어요</p>
+        <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{message}</p>
+      </div>
+      <Button
+        type="button"
+        variant="outline"
+        onClick={onRetry}
+        disabled={disabled}
+        className="h-10 rounded-xl font-bold"
+      >
+        <RefreshCw className="size-4" /> 다시 만들기
+      </Button>
     </div>
   );
 }
@@ -463,17 +522,19 @@ export function ChatScreen({
   onLogout,
 }: ChatScreenProps) {
   const purposeId = user.purposeId ?? "other";
-  const missions = useMemo(() => getMissionsByPurpose(purposeId), [purposeId]);
+  const baseMissions = useMemo(() => getMissionsByPurpose(purposeId), [purposeId]);
   const recipes = user.promptRecipes ?? [];
   const trainingStats = useMemo(
     () => normalizeTrainingStats(user.trainingStats),
     [user.trainingStats]
   );
   const [items, setItems] = useState<CoachChatItem[]>([]);
+  const [missions, setMissions] = useState<Mission[]>([]);
   const [typing, setTyping] = useState(false);
   const [input, setInput] = useState("");
   const [selectedMission, setSelectedMission] = useState<Mission | null>(null);
   const [draft, setDraft] = useState<PromptDraft | null>(null);
+  const [activeAnalysis, setActiveAnalysis] = useState<PromptAnalysis | null>(null);
   const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null);
   const [savedResultIds, setSavedResultIds] = useState<string[]>([]);
   const bottomRef = useRef<HTMLDivElement | null>(null);
@@ -481,10 +542,30 @@ export function ChatScreen({
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const repeatMapRef = useRef<Record<string, number>>({});
   const milestoneRef = useRef<Set<string>>(new Set());
+  const missionRequestRef = useRef(0);
   const statsRef = useRef(trainingStats);
 
-  const currentAnalysis =
-    selectedMission && draft ? analyzeDraft(selectedMission, draft) : null;
+  const currentAnalysis = selectedMission && draft
+    ? activeAnalysis ?? analyzeDraft(selectedMission, draft)
+    : null;
+  const coachProfile = useMemo<CoachProfile>(
+    () => ({
+      name: user.name,
+      ageGroup: user.ageGroup,
+      job: user.job,
+      purposeLabel: user.purposeLabel ?? "",
+      purposeDetail: user.purposeDetail ?? "",
+      surveyAnswers: user.surveyAnswers,
+    }),
+    [
+      user.ageGroup,
+      user.job,
+      user.name,
+      user.purposeDetail,
+      user.purposeLabel,
+      user.surveyAnswers,
+    ]
+  );
 
   useEffect(() => {
     if (trainingStats.qnaCount >= statsRef.current.qnaCount) {
@@ -508,6 +589,47 @@ export function ChatScreen({
     [later]
   );
 
+  const loadPersonalizedMissions = useCallback(async () => {
+    const requestId = ++missionRequestRef.current;
+    setTyping(true);
+    setItems((prev) =>
+      prev.filter((item) => item.kind !== "missions" && item.kind !== "mission-error")
+    );
+
+    try {
+      const result = await generatePersonalizedMissions(purposeId, coachProfile);
+      if (missionRequestRef.current !== requestId) return;
+      const nextMissions = hydratePersonalizedMissions(result.missions, baseMissions);
+      if (nextMissions.length !== 3) {
+        throw new Error("AI가 맞춤 미션 3개를 완성하지 못했어요.");
+      }
+      setMissions(nextMissions);
+      setTyping(false);
+      setItems((prev) => [
+        ...prev,
+        { id: uid(), role: "assistant", kind: "missions" },
+      ]);
+    } catch (error) {
+      if (missionRequestRef.current !== requestId) return;
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : "맞춤 미션 생성 중 오류가 발생했어요.";
+      setMissions([]);
+      setTyping(false);
+      toast.error(message);
+      setItems((prev) => [
+        ...prev,
+        {
+          id: uid(),
+          role: "assistant",
+          kind: "mission-error",
+          message,
+        },
+      ]);
+    }
+  }, [baseMissions, coachProfile, purposeId]);
+
   const registerRepeatEvent = (text: string) => {
     const key = normalizeRepeatKey(text);
     if (!key) return null;
@@ -515,6 +637,35 @@ export function ChatScreen({
     repeatMapRef.current[key] = nextCount;
     if (nextCount < 2) return null;
     return repeatEvents[(nextCount - 2) % repeatEvents.length];
+  };
+
+  // AI 오류로 입력을 되돌릴 때 반복 카운트도 함께 되돌린다 —
+  // 같은 내용을 재전송해도 반복 이벤트로 오인하지 않게.
+  const unregisterRepeat = (text: string) => {
+    const key = normalizeRepeatKey(text);
+    if (!key) return;
+    const count = repeatMapRef.current[key] ?? 0;
+    if (count > 0) repeatMapRef.current[key] = count - 1;
+  };
+
+  const failWithAIError = (error: unknown, restoreText: string) => {
+    const message =
+      error instanceof Error && error.message
+        ? error.message
+        : "AI 응답을 받지 못했어요.";
+    unregisterRepeat(restoreText);
+    setTyping(false);
+    setInput(restoreText);
+    toast.error(message);
+    setItems((prev) => [
+      ...prev,
+      {
+        id: uid(),
+        role: "assistant",
+        kind: "text",
+        text: `⚠️ ${message}\n\n입력창에 내용을 되돌려놨어요. 설정(.env.local)이나 네트워크를 확인한 뒤 다시 보내주세요.`,
+      },
+    ]);
   };
 
   const recordPracticeTurn = (analysis: PromptAnalysis, completed = false) => {
@@ -526,10 +677,10 @@ export function ChatScreen({
   const buildResponseItems = (
     mission: Mission,
     nextDraft: PromptDraft,
+    analysis: PromptAnalysis,
     phase: "first" | "answer",
     events: CoachEvent[] = []
   ) => {
-    const analysis = analyzeDraft(mission, nextDraft);
     const eventItems: CoachChatItem[] = events.map((event) => ({
       id: uid(),
       role: "assistant",
@@ -582,7 +733,6 @@ export function ChatScreen({
 
     setTyping(true);
     later(() => {
-      setTyping(false);
       setItems([
         {
           id: uid(),
@@ -592,27 +742,17 @@ export function ChatScreen({
         },
       ]);
     }, 800);
-    later(() => setTyping(true), 1150);
-    later(() => {
-      setTyping(false);
-      setItems((prev) => [
-        ...prev,
-        {
-          id: uid(),
-          role: "assistant",
-          kind: "missions",
-        },
-      ]);
-    }, 1900);
+    later(() => void loadPersonalizedMissions(), 1150);
 
     const timers = timersRef.current;
     return () => {
       timers.forEach(clearTimeout);
+      missionRequestRef.current += 1;
       initRef.current = false;
       setTyping(false);
       setItems([]);
     };
-  }, [later, user.name, user.purposeDetail]);
+  }, [later, loadPersonalizedMissions, user.name, user.purposeDetail]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -622,6 +762,7 @@ export function ChatScreen({
     if (typing) return;
     setSelectedMission(mission);
     setDraft(null);
+    setActiveAnalysis(null);
     setInput("");
     setActiveQuestionId(null);
     setSavedResultIds([]);
@@ -639,49 +780,97 @@ export function ChatScreen({
     ]);
   };
 
-  const startDraft = (text: string) => {
+  const startDraft = async (text: string) => {
     const mission = selectedMission ?? missions[0];
+    if (!mission) {
+      toast.info("맞춤 미션을 먼저 만들어주세요.");
+      return;
+    }
     const repeatEvent = registerRepeatEvent(text);
-    const nextDraft = createDraft(mission, text, user.savedContext);
-    const nextAnalysis = analyzeDraft(mission, nextDraft);
-    const nextStats = recordPracticeTurn(nextAnalysis, nextAnalysis.complete);
     setSelectedMission(mission);
-    setDraft(nextDraft);
     setInput("");
     setItems((prev) => [
       ...prev,
       { id: uid(), role: "user", kind: "text", text },
     ]);
 
-    const events = repeatEvent ? [repeatEvent] : [];
+    // 서버(/api/coach)가 목업/실제 AI 여부를 결정한다.
+    // 최소 900ms 대기로 응답이 빨라도 대화 호흡을 유지한다.
+    setTyping(true);
+    let nextDraft: PromptDraft;
+    let nextAnalysis: PromptAnalysis;
+    try {
+      const [turn] = await Promise.all([
+        startCoachTurn(
+          mission,
+          text,
+          savedValuesFor(mission, user.savedContext),
+          coachProfile
+        ),
+        new Promise((resolve) => later(() => resolve(null), 900)),
+      ]);
+      nextDraft = buildDraft(
+        mission,
+        text,
+        turn.values ?? {},
+        user.savedContext
+      );
+      nextAnalysis = analyzeCoachTurn(mission, nextDraft, turn);
+    } catch (error) {
+      failWithAIError(error, text);
+      return;
+    }
+
+    const nextStats = recordPracticeTurn(nextAnalysis, nextAnalysis.complete);
+    setDraft(nextDraft);
+    setActiveAnalysis(nextAnalysis);
     onUpdateUser({ trainingStats: nextStats });
-    scheduleAssistant(buildResponseItems(mission, nextDraft, "first", events), 950);
+
+    const events = repeatEvent ? [repeatEvent] : [];
+    setTyping(false);
+    setItems((prev) => [
+      ...prev,
+      ...buildResponseItems(mission, nextDraft, nextAnalysis, "first", events),
+    ]);
   };
 
-  const submitIngredientAnswer = (value: string, source: "chip" | "typed") => {
+  const submitIngredientAnswer = async (value: string, source: "chip" | "typed") => {
     if (!selectedMission || !draft || !currentAnalysis?.nextIngredient) return;
     const trimmedValue = value.trim();
     if (!trimmedValue) return;
 
     const ingredient = currentAnalysis.nextIngredient;
     const repeatEvent = registerRepeatEvent(trimmedValue);
-    if (repeatEvent && source === "typed") {
-      const nextStats = recordPracticeTurn(currentAnalysis, false);
-      setInput("");
-      setItems((prev) => [
-        ...prev,
-        { id: uid(), role: "user", kind: "text", text: trimmedValue },
+    setInput("");
+    setItems((prev) => [
+      ...prev,
+      { id: uid(), role: "user", kind: "text", text: trimmedValue },
+    ]);
+    setTyping(true);
+
+    let finalValue: string;
+    let nextDraft: PromptDraft;
+    let nextAnalysis: PromptAnalysis;
+    try {
+      const [turn] = await Promise.all([
+        answerCoachTurn(
+          selectedMission,
+          draft.originalPrompt,
+          draft.values,
+          ingredient.id,
+          trimmedValue,
+          coachProfile
+        ),
+        new Promise((resolve) => later(() => resolve(null), 850)),
       ]);
-      onUpdateUser({ trainingStats: nextStats });
-      scheduleAssistant(
-        buildResponseItems(selectedMission, draft, "answer", [repeatEvent]),
-        750
-      );
+      finalValue = turn.value?.trim() || trimmedValue;
+      nextDraft = updateDraftValue(draft, ingredient.id, finalValue, source);
+      nextAnalysis = analyzeCoachTurn(selectedMission, nextDraft, turn);
+    } catch (error) {
+      failWithAIError(error, trimmedValue);
       return;
     }
 
-    const nextDraft = updateDraftValue(draft, ingredient.id, trimmedValue, source);
-    const nextAnalysis = analyzeDraft(selectedMission, nextDraft);
     const nextStats = recordPracticeTurn(nextAnalysis, nextAnalysis.complete);
     const nextEvents: CoachEvent[] = [];
     const milestoneKey = `${selectedMission.id}-3`;
@@ -697,11 +886,7 @@ export function ChatScreen({
     }
 
     setDraft(nextDraft);
-    setInput("");
-    setItems((prev) => [
-      ...prev,
-      { id: uid(), role: "user", kind: "text", text: trimmedValue },
-    ]);
+    setActiveAnalysis(nextAnalysis);
 
     const userPatch: Partial<UserProfile> = {
       trainingStats: nextStats,
@@ -711,13 +896,23 @@ export function ChatScreen({
       userPatch.savedContext = {
         ...user.savedContext,
         purposeId,
-        [ingredient.savedContextKey]: trimmedValue,
+        [ingredient.savedContextKey]: finalValue,
       };
     }
 
     onUpdateUser(userPatch);
 
-    scheduleAssistant(buildResponseItems(selectedMission, nextDraft, "answer", nextEvents), 850);
+    setTyping(false);
+    setItems((prev) => [
+      ...prev,
+      ...buildResponseItems(
+        selectedMission,
+        nextDraft,
+        nextAnalysis,
+        "answer",
+        nextEvents
+      ),
+    ]);
   };
 
   const send = () => {
@@ -725,11 +920,11 @@ export function ChatScreen({
     if (!text || typing) return;
 
     if (draft && currentAnalysis?.nextIngredient) {
-      submitIngredientAnswer(text, "typed");
+      void submitIngredientAnswer(text, "typed");
       return;
     }
 
-    startDraft(text);
+    void startDraft(text);
   };
 
   const saveRecipe = (
@@ -749,6 +944,7 @@ export function ChatScreen({
   const restartMission = (mission: Mission) => {
     setSelectedMission(mission);
     setDraft(null);
+    setActiveAnalysis(null);
     setInput(mission.starterPrompt);
     setActiveQuestionId(null);
     scheduleAssistant([
@@ -763,6 +959,10 @@ export function ChatScreen({
 
   const fillExample = () => {
     const mission = selectedMission ?? missions[0];
+    if (!mission) {
+      toast.info("맞춤 미션을 먼저 만들어주세요.");
+      return;
+    }
     setSelectedMission(mission);
     setInput(mission.starterPrompt);
   };
@@ -771,7 +971,9 @@ export function ChatScreen({
     ? currentAnalysis.nextIngredient.placeholder
     : selectedMission
       ? selectedMission.starterPrompt
-      : "미션을 고르거나, 지금 만들고 싶은 프롬프트를 입력해보세요.";
+      : missions.length > 0
+        ? "미션을 고르거나, 지금 만들고 싶은 프롬프트를 입력해보세요."
+        : "AI가 맞춤 미션을 준비하고 있어요.";
 
   return (
     <div className="flex h-dvh bg-background">
@@ -833,6 +1035,17 @@ export function ChatScreen({
                   </MessageBubble>
                 );
               }
+              if (item.kind === "mission-error") {
+                return (
+                  <MessageBubble key={item.id} role="assistant" wide>
+                    <MissionErrorMessage
+                      message={item.message}
+                      onRetry={() => void loadPersonalizedMissions()}
+                      disabled={typing}
+                    />
+                  </MessageBubble>
+                );
+              }
               if (item.kind === "coach") {
                 return (
                   <MessageBubble key={item.id} role="assistant" wide>
@@ -880,7 +1093,8 @@ export function ChatScreen({
             <button
               type="button"
               onClick={fillExample}
-              className="flex items-center gap-1.5 text-xs font-extrabold text-primary underline-offset-2 hover:underline"
+              disabled={missions.length === 0}
+              className="flex items-center gap-1.5 text-xs font-extrabold text-primary underline-offset-2 hover:underline disabled:pointer-events-none disabled:opacity-45"
             >
               <Sparkles className="size-3.5" /> 예시 프롬프트 채우기
             </button>
@@ -895,12 +1109,13 @@ export function ChatScreen({
                   }
                 }}
                 placeholder={inputPlaceholder}
+                disabled={!selectedMission && missions.length === 0}
                 className="max-h-40 min-h-11 flex-1 resize-none border-0 bg-transparent p-0 py-2.5 text-[15px] shadow-none focus-visible:ring-0"
               />
               <Button
                 size="lg"
                 onClick={send}
-                disabled={!input.trim() || typing}
+                disabled={!input.trim() || typing || missions.length === 0}
                 aria-label={currentAnalysis?.nextIngredient ? "답변 보내기" : "프롬프트 보내기"}
                 className="size-11 shrink-0 rounded-2xl p-0 transition-transform hover:scale-105 active:scale-95"
               >

@@ -79,6 +79,8 @@ export interface PromptIngredient {
 
 export interface Mission {
   id: string;
+  /** AI 맞춤 미션이 기반으로 사용하는 서버 등록 미션 id */
+  sourceMissionId?: string;
   purposeId: string;
   emoji: string;
   title: string;
@@ -90,6 +92,29 @@ export interface Mission {
   recipeTemplate: string;
   beforePreview: string;
   afterPreviewTemplate: string;
+}
+
+export interface PersonalizedMission {
+  id: string;
+  sourceMissionId: string;
+  purposeId: string;
+  emoji: string;
+  title: string;
+  description: string;
+  situation: string;
+  starterPrompt: string;
+}
+
+export interface MissionGenerationResult {
+  missions: PersonalizedMission[];
+  engine: "mock" | "ai";
+  model: string | null;
+}
+
+export interface MissionContext {
+  title: string;
+  description: string;
+  situation: string;
 }
 
 export interface PromptDraft {
@@ -116,6 +141,42 @@ export interface PromptAnalysis {
   afterPreview: string;
   recipeTemplate: string;
   complete: boolean;
+}
+
+/** 코치 턴 응답 — 다음 질문 블록 (AI 모드에서는 실제 AI가 생성) */
+export interface CoachNextContent {
+  ingredientId: string;
+  question: string;
+  why: string;
+  chips: IngredientOption[];
+}
+
+/** 코치 턴 응답 — 완성 블록 */
+export interface CoachCompleteContent {
+  improvedPrompt: string;
+  improvements: string[];
+  recipeTemplate: string;
+}
+
+/** /api/coach start·answer 액션의 공통 응답 */
+export interface CoachTurnResult {
+  /** start: 프롬프트에서 추출된 재료 값 */
+  values?: Record<string, string>;
+  /** answer: 정리된 답변 값 */
+  value?: string;
+  next: CoachNextContent | null;
+  complete: CoachCompleteContent | null;
+  engine: "mock" | "ai";
+}
+
+/** AI 개인화에 쓰이는 사용자 컨텍스트 */
+export interface CoachProfile {
+  name: string;
+  ageGroup: string;
+  job: string;
+  purposeLabel: string;
+  purposeDetail: string;
+  surveyAnswers?: LevelSurveyAnswers;
 }
 
 export interface PromptRecipe {

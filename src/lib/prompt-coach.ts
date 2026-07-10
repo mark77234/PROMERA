@@ -1,6 +1,7 @@
 import { getMissionsByPurpose } from "@/data/prompt-missions";
 import type {
   IngredientOption,
+  CoachTurnResult,
   Mission,
   PromptAnalysis,
   PromptDraft,
@@ -106,9 +107,41 @@ export function deriveSavedContext(purposeId: string, detail: string): SavedCont
   return context;
 }
 
-export function createDraft(
+/** 저장 정보에서 이 미션의 재료 값으로 쓸 수 있는 것들만 추린다 */
+export function savedValuesFor(
+  mission: Mission,
+  savedContext?: SavedContext
+): Record<string, string> {
+  const values: Record<string, string> = {};
+  for (const ingredient of mission.ingredients) {
+    const saved = valueFromSavedContext(ingredient, savedContext);
+    if (saved) values[ingredient.id] = saved;
+  }
+  return values;
+}
+
+/** 프롬프트 텍스트에서 재료 값만 추출한다 (규칙 기반 — 목업 엔진의 핵심) */
+export function extractPromptValues(
+  mission: Mission,
+  originalPrompt: string
+): Record<string, string> {
+  const values: Record<string, string> = {};
+  const prompt = normalizeWhitespace(originalPrompt);
+  for (const ingredient of mission.ingredients) {
+    const promptValue = extractByPattern(prompt, ingredient);
+    if (promptValue) values[ingredient.id] = promptValue;
+  }
+  return values;
+}
+
+/**
+ * 추출된 프롬프트 값(규칙 기반이든 실제 AI든)과 저장 정보를 합쳐
+ * 출처 라벨이 붙은 드래프트를 만든다.
+ */
+export function buildDraft(
   mission: Mission,
   originalPrompt: string,
+  promptValues: Record<string, string>,
   savedContext?: SavedContext
 ): PromptDraft {
   const values: Record<string, string> = {};
@@ -116,9 +149,9 @@ export function createDraft(
   const prompt = normalizeWhitespace(originalPrompt);
 
   for (const ingredient of mission.ingredients) {
-    const promptValue = extractByPattern(prompt, ingredient);
+    const promptValue = promptValues[ingredient.id];
     if (promptValue) {
-      values[ingredient.id] = promptValue;
+      values[ingredient.id] = normalizeWhitespace(promptValue);
       sources[ingredient.id] = "prompt";
       continue;
     }
@@ -136,6 +169,19 @@ export function createDraft(
     values,
     sources,
   };
+}
+
+export function createDraft(
+  mission: Mission,
+  originalPrompt: string,
+  savedContext?: SavedContext
+): PromptDraft {
+  return buildDraft(
+    mission,
+    originalPrompt,
+    extractPromptValues(mission, originalPrompt),
+    savedContext
+  );
 }
 
 export function updateDraftValue(
@@ -186,6 +232,48 @@ export function analyzeDraft(mission: Mission, draft: PromptDraft): PromptAnalys
     afterPreview,
     recipeTemplate: mission.recipeTemplate,
     complete: missingIngredients.length === 0,
+  };
+}
+
+/**
+ * 로컬 분석은 진행 상태만 계산하고, 사용자에게 보이는 코칭 문구는
+ * 서버에서 검증된 AI 턴 응답으로 교체한다.
+ */
+export function analyzeCoachTurn(
+  mission: Mission,
+  draft: PromptDraft,
+  turn: CoachTurnResult
+): PromptAnalysis {
+  const analysis = analyzeDraft(mission, draft);
+
+  if (analysis.complete) {
+    if (!turn.complete) {
+      throw new Error("AI가 완성된 프롬프트를 반환하지 않았어요. 다시 시도해주세요.");
+    }
+    return {
+      ...analysis,
+      improvedPrompt: turn.complete.improvedPrompt,
+      improvements: turn.complete.improvements,
+      recipeTemplate: turn.complete.recipeTemplate,
+    };
+  }
+
+  if (!turn.next || turn.next.ingredientId !== analysis.nextIngredient?.id) {
+    throw new Error("AI의 다음 질문을 확인하지 못했어요. 다시 시도해주세요.");
+  }
+
+  const nextIngredient: PromptIngredient = {
+    ...analysis.nextIngredient,
+    question: turn.next.question,
+    why: turn.next.why,
+    options: turn.next.chips,
+  };
+
+  return {
+    ...analysis,
+    nextIngredient,
+    nextQuestion: nextIngredient.question,
+    chipOptions: nextIngredient.options,
   };
 }
 
