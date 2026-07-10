@@ -55,7 +55,7 @@ USE_MOCK_AI=false
 
 ## 구조 요약
 
-- 플로우: 랜딩 → 로그인(목업) → 온보딩 → 수준 설문(6문항) → 목적 선택 → 상세 목표 → 코칭 챗봇 (무한 반복 학습)
+- 플로우: 랜딩에서 원클릭 시작 → 온보딩 → 수준 설문(6문항) → 목적 선택 → 상세 목표 → 코칭 챗봇 (재방문 시 바로 이어서 학습)
 - 코칭 엔진: [src/lib/prompt-coach.ts](src/lib/prompt-coach.ts) (재료 추출·분석·레시피), [src/data/prompt-missions.ts](src/data/prompt-missions.ts) (6개 주제 × 미션·재료 정의)
 - 영상 촬영 가이드: [TUTORIAL.md](TUTORIAL.md)
 
@@ -63,4 +63,4 @@ USE_MOCK_AI=false
 
 Next.js (App Router) · TypeScript · Tailwind CSS v4 · shadcn/ui · sonner · OpenAI API (선택)
 
-인증·DB 없음 — 사용자 데이터는 localStorage(`promera-user`)에만 저장됩니다.
+인증·DB 없음 — 별도 로그인 없이 사용자 데이터는 localStorage(`promera-user`)에만 저장됩니다.

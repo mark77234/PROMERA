@@ -6,7 +6,6 @@ import { toast } from "sonner";
 import { BrandLogo } from "@/components/brand-logo";
 import { FunnelProgress } from "@/components/funnel-progress";
 import { LandingPage } from "@/components/landing-page";
-import { LoginScreen } from "@/components/login-screen";
 import { OnboardingScreen } from "@/components/onboarding-screen";
 import { LevelSurveyScreen } from "@/components/level-survey-screen";
 import { PurposeSelectScreen } from "@/components/purpose-select-screen";
@@ -20,7 +19,6 @@ import type { LevelSurveyAnswers, UserProfile } from "@/types/app";
 
 type Screen =
   | "landing"
-  | "login"
   | "onboarding"
   | "survey"
   | "purpose"
@@ -39,18 +37,30 @@ export function PromeraApp() {
     });
   };
 
-  const handleLogin = (email: string) => {
+  const handleStart = () => {
     const stored = loadUser();
-    if (stored && stored.onboarded && stored.purposeId && stored.purposeDetail) {
-      // 재방문 사용자 — 온보딩·설문 건너뛰고 바로 학습으로
-      const next = { ...stored, email };
-      setUser(next);
-      saveUser(next);
-      setScreen("chat");
-      toast.success(`다시 오셨네요, ${withHonorific(stored.name)}! 이어서 학습해요 🎉`);
-      return;
+    if (stored) {
+      setUser(stored);
+      if (stored.onboarded && stored.purposeId && stored.purposeDetail) {
+        setScreen("chat");
+        toast.success(`다시 오셨네요, ${withHonorific(stored.name)}! 이어서 학습해요 🎉`);
+        return;
+      }
+      if (stored.purposeId) {
+        setScreen("detail");
+        return;
+      }
+      if (stored.surveyAnswers) {
+        setScreen("purpose");
+        return;
+      }
+      if (stored.onboarded) {
+        setScreen("survey");
+        return;
+      }
     }
-    setUser({ email, name: "", ageGroup: "", job: "", onboarded: false });
+
+    setUser({ name: "", ageGroup: "", job: "", onboarded: false });
     setScreen("onboarding");
   };
 
@@ -65,7 +75,12 @@ export function PromeraApp() {
   };
 
   const handlePurpose = (purposeId: string) => {
-    update({ purposeId, purposeLabel: getPurposeById(purposeId).label });
+    update({
+      purposeId,
+      purposeLabel: getPurposeById(purposeId).label,
+      purposeDetail: undefined,
+      savedContext: undefined,
+    });
     setScreen("detail");
   };
 
@@ -78,10 +93,10 @@ export function PromeraApp() {
   };
 
   const handleLogout = () => {
-    // 프로필은 남겨두어 재로그인 시 "다시 오셨네요" 경험 유지
+    // 학습 데이터는 브라우저에 남겨두고 시작 화면으로만 이동한다.
     setUser(null);
     setScreen("landing");
-    toast.info("로그아웃되었습니다. 다음에 또 만나요!");
+    toast.info("시작 화면으로 돌아왔어요.");
   };
 
   const handleReset = () => {
@@ -91,10 +106,7 @@ export function PromeraApp() {
   };
 
   if (screen === "landing") {
-    return <LandingPage onStart={() => setScreen("login")} />;
-  }
-  if (screen === "login") {
-    return <LoginScreen onLogin={handleLogin} onBack={() => setScreen("landing")} />;
+    return <LandingPage onStart={handleStart} />;
   }
   if (screen === "chat" && user) {
     return (
@@ -120,7 +132,7 @@ export function PromeraApp() {
   // 이미 학습 중인 사용자가 "새로운 주제로 학습"으로 왔다면 뒤로가기는 챗으로 돌아간다.
   const backTarget: Screen | null =
     screen === "onboarding"
-      ? "login"
+      ? "landing"
       : screen === "survey"
         ? "onboarding"
         : screen === "purpose"

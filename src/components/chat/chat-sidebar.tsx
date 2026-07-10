@@ -51,7 +51,9 @@ export function ChatSidebar({
           </div>
           <div className="min-w-0">
             <p className="truncate font-bold">{user.name}</p>
-            <p className="truncate text-xs text-muted-foreground">{user.email}</p>
+            <p className="truncate text-xs text-muted-foreground">
+              {user.purposeLabel ?? user.job}
+            </p>
           </div>
         </div>
         <div className="mt-3 flex flex-wrap gap-1.5 text-[11px] font-semibold">
@@ -155,7 +157,7 @@ export function ChatSidebar({
           className="w-full justify-start gap-2 rounded-xl text-muted-foreground"
           onClick={onLogout}
         >
-          <LogOut className="size-4" /> 로그아웃
+          <LogOut className="size-4" /> 시작 화면으로
         </Button>
       </div>
 

@@ -90,7 +90,7 @@ export function LandingPage({ onStart }: LandingPageProps) {
             onClick={onStart}
             className="rounded-full px-5 font-semibold shadow-sm shadow-primary/15"
           >
-            로그인
+            바로 시작
           </Button>
         </div>
       </header>
@@ -132,10 +132,10 @@ export function LandingPage({ onStart }: LandingPageProps) {
               onClick={onStart}
               className="h-14 rounded-2xl px-10 text-lg font-bold shadow-lg shadow-primary/25 transition-all hover:scale-105 hover:shadow-xl hover:shadow-primary/30 active:scale-95"
             >
-              무료로 시작하기 <ArrowRight className="size-5" />
+              바로 시작하기 <ArrowRight className="size-5" />
             </Button>
             <span className="text-xs text-muted-foreground">
-              가입 30초 · 설치 없이 바로 시작
+              가입 없이 · 설치 없이 바로 시작
             </span>
           </div>
 
@@ -284,7 +284,7 @@ export function LandingPage({ onStart }: LandingPageProps) {
               onClick={onStart}
               className="mt-7 h-14 rounded-2xl px-10 text-lg font-bold text-primary shadow-xl transition-all hover:scale-105 active:scale-95"
             >
-              무료로 시작하기 <ArrowRight className="size-5" />
+              바로 시작하기 <ArrowRight className="size-5" />
             </Button>
           </div>
         </Reveal>

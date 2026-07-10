@@ -10,9 +10,17 @@ export function loadUser(): UserProfile | null {
       window.localStorage.getItem(STORAGE_KEY) ??
       window.localStorage.getItem(LEGACY_STORAGE_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as UserProfile;
-    if (!parsed || typeof parsed.email !== "string") return null;
-    return parsed;
+    const parsed = JSON.parse(raw) as Partial<UserProfile>;
+    if (
+      !parsed ||
+      typeof parsed.name !== "string" ||
+      typeof parsed.ageGroup !== "string" ||
+      typeof parsed.job !== "string" ||
+      typeof parsed.onboarded !== "boolean"
+    ) {
+      return null;
+    }
+    return parsed as UserProfile;
   } catch {
     return null;
   }
