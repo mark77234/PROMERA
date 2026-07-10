@@ -15,14 +15,14 @@ npm run dev
 # http://localhost:3000
 ```
 
-## AI 응답 설정 (목업 ↔ 실제 AI)
+## AI 응답 설정
 
 `.env.local`에서 코칭 응답 엔진을 선택할 수 있습니다.
 
 ```bash
-# true  → 규칙 기반 목업 응답 (네트워크 불필요, 영상 촬영·시연에 안정적)
-# false → 무조건 실제 OpenAI 호출 (OPENAI_API_KEY 필수)
-USE_MOCK_AI=true
+# false → 실제 OpenAI 호출 (알파 운영 기본값, OPENAI_API_KEY 필수)
+# true  → 규칙 기반 목업 응답 (오프라인 개발·시연 전용)
+USE_MOCK_AI=false
 
 # USE_MOCK_AI=false일 때 필수
 OPENAI_API_KEY=sk-...
@@ -32,7 +32,9 @@ OPENAI_MODEL=gpt-4o-mini
 ```
 
 - 환경변수를 바꾸면 dev 서버를 재시작해야 반영됩니다.
-- `USE_MOCK_AI=false`에서는 목업으로 대체하지 않습니다 — 키 누락·호출 실패(타임아웃 등) 시 채팅 화면에 오류 말풍선과 토스트가 표시되고, 입력 내용이 입력창에 복원되어 바로 재시도할 수 있습니다.
+- `USE_MOCK_AI`를 생략해도 실제 AI 모드로 동작합니다. 목업은 `USE_MOCK_AI=true`로 명시한 경우에만 사용합니다.
+- 실제 AI 모드에서는 목업으로 대체하지 않습니다. 키 누락·호출 실패(타임아웃 등) 시 채팅 화면에 오류 말풍선과 토스트가 표시되고, 입력 내용이 입력창에 복원되어 바로 재시도할 수 있습니다.
+- 수준 설문, 직업, 연령대, 사용 목적과 저장 정보가 코칭 컨텍스트로 전달됩니다. 프롬프트 분석, 다음 질문, 질문 이유, 추천 선택지, 최종 프롬프트, 개선점과 레시피 템플릿은 매 턴의 구조화 AI 응답으로 생성됩니다.
 - 서버 라우트 [src/app/api/coach/route.ts](src/app/api/coach/route.ts)가 목업/실제 AI 분기를 담당하고, API 키는 서버에서만 사용됩니다.
 
 ## 구조 요약

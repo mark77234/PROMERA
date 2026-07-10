@@ -1,6 +1,7 @@
 import { getMissionsByPurpose } from "@/data/prompt-missions";
 import type {
   IngredientOption,
+  CoachTurnResult,
   Mission,
   PromptAnalysis,
   PromptDraft,
@@ -104,6 +105,19 @@ export function deriveSavedContext(purposeId: string, detail: string): SavedCont
   // 자동 저장하지 않는다 — 미션에서 칩/입력으로 직접 채우게 한다.
 
   return context;
+}
+
+/** 저장 정보에서 이 미션의 재료 값으로 쓸 수 있는 것들만 추린다 */
+export function savedValuesFor(
+  mission: Mission,
+  savedContext?: SavedContext
+): Record<string, string> {
+  const values: Record<string, string> = {};
+  for (const ingredient of mission.ingredients) {
+    const saved = valueFromSavedContext(ingredient, savedContext);
+    if (saved) values[ingredient.id] = saved;
+  }
+  return values;
 }
 
 /** 프롬프트 텍스트에서 재료 값만 추출한다 (규칙 기반 — 목업 엔진의 핵심) */
@@ -218,6 +232,48 @@ export function analyzeDraft(mission: Mission, draft: PromptDraft): PromptAnalys
     afterPreview,
     recipeTemplate: mission.recipeTemplate,
     complete: missingIngredients.length === 0,
+  };
+}
+
+/**
+ * 로컬 분석은 진행 상태만 계산하고, 사용자에게 보이는 코칭 문구는
+ * 서버에서 검증된 AI 턴 응답으로 교체한다.
+ */
+export function analyzeCoachTurn(
+  mission: Mission,
+  draft: PromptDraft,
+  turn: CoachTurnResult
+): PromptAnalysis {
+  const analysis = analyzeDraft(mission, draft);
+
+  if (analysis.complete) {
+    if (!turn.complete) {
+      throw new Error("AI가 완성된 프롬프트를 반환하지 않았어요. 다시 시도해주세요.");
+    }
+    return {
+      ...analysis,
+      improvedPrompt: turn.complete.improvedPrompt,
+      improvements: turn.complete.improvements,
+      recipeTemplate: turn.complete.recipeTemplate,
+    };
+  }
+
+  if (!turn.next || turn.next.ingredientId !== analysis.nextIngredient?.id) {
+    throw new Error("AI의 다음 질문을 확인하지 못했어요. 다시 시도해주세요.");
+  }
+
+  const nextIngredient: PromptIngredient = {
+    ...analysis.nextIngredient,
+    question: turn.next.question,
+    why: turn.next.why,
+    options: turn.next.chips,
+  };
+
+  return {
+    ...analysis,
+    nextIngredient,
+    nextQuestion: nextIngredient.question,
+    chipOptions: nextIngredient.options,
   };
 }
 

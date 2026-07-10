@@ -1,46 +1,53 @@
-import type { Mission } from "@/types/app";
+import type { CoachProfile, CoachTurnResult, Mission } from "@/types/app";
 
-// /api/coach 호출 래퍼 — 서버가 목업/실제 AI를 결정한다.
-// USE_MOCK_AI=false에서는 목업 폴백 없이 서버 오류를 그대로 던지고,
-// 채팅 화면이 사용자에게 오류를 표시한다.
-
-async function postCoach<T>(body: Record<string, unknown>): Promise<T> {
-  const res = await fetch("/api/coach", {
+async function postCoach(body: Record<string, unknown>): Promise<CoachTurnResult> {
+  const response = await fetch("/api/coach", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+    cache: "no-store",
   });
-  const data = (await res.json().catch(() => ({}))) as T & { error?: string };
-  if (!res.ok) {
-    throw new Error(data.error || `코치 API 오류 (${res.status})`);
+  const data = (await response.json().catch(() => ({}))) as CoachTurnResult & {
+    error?: string;
+  };
+  if (!response.ok) {
+    throw new Error(data.error || `코치 API 오류 (${response.status})`);
   }
   return data;
 }
 
-export async function extractValuesRemote(
+export function startCoachTurn(
   mission: Mission,
-  prompt: string
-): Promise<Record<string, string>> {
-  const data = await postCoach<{ values?: Record<string, string> }>({
-    action: "extract",
+  prompt: string,
+  savedValues: Record<string, string>,
+  profile: CoachProfile
+): Promise<CoachTurnResult> {
+  return postCoach({
+    action: "start",
     purposeId: mission.purposeId,
     missionId: mission.id,
     prompt,
+    savedValues,
+    profile,
   });
-  return data.values ?? {};
 }
 
-export async function normalizeAnswerRemote(
+export function answerCoachTurn(
   mission: Mission,
+  originalPrompt: string,
+  knownValues: Record<string, string>,
   ingredientId: string,
-  answer: string
-): Promise<string> {
-  const data = await postCoach<{ value?: string }>({
-    action: "normalize",
+  answer: string,
+  profile: CoachProfile
+): Promise<CoachTurnResult> {
+  return postCoach({
+    action: "answer",
     purposeId: mission.purposeId,
     missionId: mission.id,
+    originalPrompt,
+    knownValues,
     ingredientId,
     answer,
+    profile,
   });
-  return data.value?.trim() || answer.trim();
 }

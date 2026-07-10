@@ -21,15 +21,18 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { getMissionsByPurpose } from "@/data/prompt-missions";
 import {
+  analyzeCoachTurn,
   analyzeDraft,
   buildDraft,
   createRecipe,
   optionValue,
+  savedValuesFor,
   updateDraftValue,
 } from "@/lib/prompt-coach";
-import { extractValuesRemote, normalizeAnswerRemote } from "@/lib/coach-client";
+import { answerCoachTurn, startCoachTurn } from "@/lib/coach-client";
 import { cn, withHonorific } from "@/lib/utils";
 import type {
+  CoachProfile,
   IngredientStatus,
   Mission,
   PromptAnalysis,
@@ -475,6 +478,7 @@ export function ChatScreen({
   const [input, setInput] = useState("");
   const [selectedMission, setSelectedMission] = useState<Mission | null>(null);
   const [draft, setDraft] = useState<PromptDraft | null>(null);
+  const [activeAnalysis, setActiveAnalysis] = useState<PromptAnalysis | null>(null);
   const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null);
   const [savedResultIds, setSavedResultIds] = useState<string[]>([]);
   const bottomRef = useRef<HTMLDivElement | null>(null);
@@ -484,8 +488,17 @@ export function ChatScreen({
   const milestoneRef = useRef<Set<string>>(new Set());
   const statsRef = useRef(trainingStats);
 
-  const currentAnalysis =
-    selectedMission && draft ? analyzeDraft(selectedMission, draft) : null;
+  const currentAnalysis = selectedMission && draft
+    ? activeAnalysis ?? analyzeDraft(selectedMission, draft)
+    : null;
+  const coachProfile: CoachProfile = {
+    name: user.name,
+    ageGroup: user.ageGroup,
+    job: user.job,
+    purposeLabel: user.purposeLabel ?? "",
+    purposeDetail: user.purposeDetail ?? "",
+    surveyAnswers: user.surveyAnswers,
+  };
 
   useEffect(() => {
     if (trainingStats.qnaCount >= statsRef.current.qnaCount) {
@@ -556,10 +569,10 @@ export function ChatScreen({
   const buildResponseItems = (
     mission: Mission,
     nextDraft: PromptDraft,
+    analysis: PromptAnalysis,
     phase: "first" | "answer",
     events: CoachEvent[] = []
   ) => {
-    const analysis = analyzeDraft(mission, nextDraft);
     const eventItems: CoachChatItem[] = events.map((event) => ({
       id: uid(),
       role: "assistant",
@@ -652,6 +665,7 @@ export function ChatScreen({
     if (typing) return;
     setSelectedMission(mission);
     setDraft(null);
+    setActiveAnalysis(null);
     setInput("");
     setActiveQuestionId(null);
     setSavedResultIds([]);
@@ -682,26 +696,41 @@ export function ChatScreen({
     // 서버(/api/coach)가 목업/실제 AI 여부를 결정한다.
     // 최소 900ms 대기로 응답이 빨라도 대화 호흡을 유지한다.
     setTyping(true);
-    let promptValues: Record<string, string>;
+    let nextDraft: PromptDraft;
+    let nextAnalysis: PromptAnalysis;
     try {
-      [promptValues] = await Promise.all([
-        extractValuesRemote(mission, text),
+      const [turn] = await Promise.all([
+        startCoachTurn(
+          mission,
+          text,
+          savedValuesFor(mission, user.savedContext),
+          coachProfile
+        ),
         new Promise((resolve) => later(() => resolve(null), 900)),
       ]);
+      nextDraft = buildDraft(
+        mission,
+        text,
+        turn.values ?? {},
+        user.savedContext
+      );
+      nextAnalysis = analyzeCoachTurn(mission, nextDraft, turn);
     } catch (error) {
       failWithAIError(error, text);
       return;
     }
 
-    const nextDraft = buildDraft(mission, text, promptValues, user.savedContext);
-    const nextAnalysis = analyzeDraft(mission, nextDraft);
     const nextStats = recordPracticeTurn(nextAnalysis, nextAnalysis.complete);
     setDraft(nextDraft);
+    setActiveAnalysis(nextAnalysis);
     onUpdateUser({ trainingStats: nextStats });
 
     const events = repeatEvent ? [repeatEvent] : [];
     setTyping(false);
-    setItems((prev) => [...prev, ...buildResponseItems(mission, nextDraft, "first", events)]);
+    setItems((prev) => [
+      ...prev,
+      ...buildResponseItems(mission, nextDraft, nextAnalysis, "first", events),
+    ]);
   };
 
   const submitIngredientAnswer = async (value: string, source: "chip" | "typed") => {
@@ -711,44 +740,36 @@ export function ChatScreen({
 
     const ingredient = currentAnalysis.nextIngredient;
     const repeatEvent = registerRepeatEvent(trimmedValue);
-    if (repeatEvent && source === "typed") {
-      const nextStats = recordPracticeTurn(currentAnalysis, false);
-      setInput("");
-      setItems((prev) => [
-        ...prev,
-        { id: uid(), role: "user", kind: "text", text: trimmedValue },
+    setInput("");
+    setItems((prev) => [
+      ...prev,
+      { id: uid(), role: "user", kind: "text", text: trimmedValue },
+    ]);
+    setTyping(true);
+
+    let finalValue: string;
+    let nextDraft: PromptDraft;
+    let nextAnalysis: PromptAnalysis;
+    try {
+      const [turn] = await Promise.all([
+        answerCoachTurn(
+          selectedMission,
+          draft.originalPrompt,
+          draft.values,
+          ingredient.id,
+          trimmedValue,
+          coachProfile
+        ),
+        new Promise((resolve) => later(() => resolve(null), 850)),
       ]);
-      onUpdateUser({ trainingStats: nextStats });
-      scheduleAssistant(
-        buildResponseItems(selectedMission, draft, "answer", [repeatEvent]),
-        750
-      );
+      finalValue = turn.value?.trim() || trimmedValue;
+      nextDraft = updateDraftValue(draft, ingredient.id, finalValue, source);
+      nextAnalysis = analyzeCoachTurn(selectedMission, nextDraft, turn);
+    } catch (error) {
+      failWithAIError(error, trimmedValue);
       return;
     }
 
-    // 직접 입력한 답은 실제 AI 모드에서 간결한 구로 정리된다 (목업이면 그대로).
-    let finalValue = trimmedValue;
-    if (source === "typed") {
-      setInput("");
-      setItems((prev) => [
-        ...prev,
-        { id: uid(), role: "user", kind: "text", text: trimmedValue },
-      ]);
-      setTyping(true);
-      try {
-        const [normalized] = await Promise.all([
-          normalizeAnswerRemote(selectedMission, ingredient.id, trimmedValue),
-          new Promise((resolve) => later(() => resolve(null), 850)),
-        ]);
-        finalValue = normalized;
-      } catch (error) {
-        failWithAIError(error, trimmedValue);
-        return;
-      }
-    }
-
-    const nextDraft = updateDraftValue(draft, ingredient.id, finalValue, source);
-    const nextAnalysis = analyzeDraft(selectedMission, nextDraft);
     const nextStats = recordPracticeTurn(nextAnalysis, nextAnalysis.complete);
     const nextEvents: CoachEvent[] = [];
     const milestoneKey = `${selectedMission.id}-3`;
@@ -764,14 +785,7 @@ export function ChatScreen({
     }
 
     setDraft(nextDraft);
-    if (source === "chip") {
-      // typed 경로는 정리(normalize) 전에 이미 사용자 메시지를 추가했다.
-      setInput("");
-      setItems((prev) => [
-        ...prev,
-        { id: uid(), role: "user", kind: "text", text: trimmedValue },
-      ]);
-    }
+    setActiveAnalysis(nextAnalysis);
 
     const userPatch: Partial<UserProfile> = {
       trainingStats: nextStats,
@@ -787,10 +801,17 @@ export function ChatScreen({
 
     onUpdateUser(userPatch);
 
-    scheduleAssistant(
-      buildResponseItems(selectedMission, nextDraft, "answer", nextEvents),
-      source === "typed" ? 350 : 850
-    );
+    setTyping(false);
+    setItems((prev) => [
+      ...prev,
+      ...buildResponseItems(
+        selectedMission,
+        nextDraft,
+        nextAnalysis,
+        "answer",
+        nextEvents
+      ),
+    ]);
   };
 
   const send = () => {
@@ -822,6 +843,7 @@ export function ChatScreen({
   const restartMission = (mission: Mission) => {
     setSelectedMission(mission);
     setDraft(null);
+    setActiveAnalysis(null);
     setInput(mission.starterPrompt);
     setActiveQuestionId(null);
     scheduleAssistant([
